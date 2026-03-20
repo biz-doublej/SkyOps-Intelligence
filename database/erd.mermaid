@@ -1,0 +1,92 @@
+erDiagram
+    airports {
+        varchar airport_code PK "IATA 코드 (예: RKSI)"
+        varchar airport_name "공항명"
+        varchar city "도시"
+        varchar country "국가"
+        decimal latitude "위도"
+        decimal longitude "경도"
+        varchar timezone "시간대 (예: Asia/Seoul)"
+    }
+
+    airlines {
+        varchar carrier_code PK "항공사 코드 (예: KE)"
+        varchar carrier_name "항공사명"
+        varchar country "국가"
+    }
+
+    flights {
+        bigint flight_id PK "항공편 ID"
+        varchar callsign "콜사인 (예: KAL601)"
+        varchar icao24 "항공기 ICAO 24비트 주소"
+        varchar carrier_code FK "항공사 코드"
+        varchar origin_airport FK "출발 공항"
+        varchar dest_airport FK "도착 공항"
+        timestamp scheduled_dep_time "예정 출발시각"
+        timestamp scheduled_arr_time "예정 도착시각"
+        timestamp actual_dep_time "실제 출발시각"
+        timestamp actual_arr_time "실제 도착시각"
+        int dep_delay_min "출발 지연(분)"
+        int arr_delay_min "도착 지연(분)"
+        decimal distance_miles "비행 거리(마일)"
+        date flight_date "운항일"
+    }
+
+    flight_positions {
+        bigint position_id PK "위치 레코드 ID"
+        varchar icao24 "항공기 ICAO 주소"
+        varchar callsign "콜사인"
+        bigint flight_id FK "항공편 ID (nullable)"
+        timestamp position_time "위치 측정 시각"
+        decimal latitude "위도"
+        decimal longitude "경도"
+        decimal baro_altitude "기압고도(m)"
+        decimal geo_altitude "지오고도(m)"
+        decimal velocity "속도(m/s)"
+        decimal true_track "진행 방향(도)"
+        decimal vertical_rate "수직 속도(m/s)"
+        boolean on_ground "지상 여부"
+        varchar squawk "스쿼크 코드"
+    }
+
+    weather_observations {
+        bigint obs_id PK "관측 레코드 ID"
+        varchar airport_code FK "관측 공항"
+        timestamp observed_at "관측 시각"
+        decimal wind_speed_knots "풍속(knot)"
+        int wind_direction_deg "풍향(도)"
+        decimal visibility_miles "시정(마일)"
+        int ceiling_ft "운고(ft)"
+        decimal temperature_c "기온(℃)"
+        decimal dewpoint_c "이슬점(℃)"
+        decimal altimeter_inhg "기압(inHg)"
+        decimal precipitation_inch "강수량(inch)"
+        text raw_metar "원본 METAR 문자열"
+    }
+
+    anomaly_events {
+        bigint event_id PK "이상 이벤트 ID"
+        varchar icao24 "항공기 ICAO 주소"
+        bigint flight_id FK "항공편 ID (nullable)"
+        bigint position_id FK "위치 레코드 ID"
+        timestamp detected_at "탐지 시각"
+        varchar event_type "이벤트 유형 (altitude_spike / velocity_spike / route_deviation / ground_proximity)"
+        varchar severity "심각도 (LOW / MEDIUM / HIGH / CRITICAL)"
+        decimal latitude "발생 위도"
+        decimal longitude "발생 경도"
+        decimal altitude_m "발생 고도(m)"
+        decimal velocity_ms "발생 속도(m/s)"
+        text description "이벤트 설명"
+        text llm_explanation "LLM 자연어 설명"
+        text response_procedure "대응 절차 (LLM 생성)"
+        boolean is_resolved "해결 여부"
+        timestamp resolved_at "해결 시각"
+    }
+
+    airlines ||--o{ flights : "운항"
+    airports ||--o{ flights : "출발"
+    airports ||--o{ flights : "도착"
+    airports ||--o{ weather_observations : "관측"
+    flights ||--o{ flight_positions : "추적"
+    flights ||--o{ anomaly_events : "발생"
+    flight_positions ||--o{ anomaly_events : "탐지"
