@@ -1,0 +1,89 @@
+# =============================================================
+# SkyOps Intelligence — .gitignore
+# =============================================================
+
+# ── 환경 변수 & 시크릿 (절대 커밋 금지) ──────────────────
+.env
+.env.local
+.env.*.local
+secrets/
+*.pem
+*.key
+credentials.json
+gcp-sa-key.json
+
+# ── Python ────────────────────────────────────────────────
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+build/
+dist/
+*.egg-info/
+.eggs/
+*.egg
+
+# 가상환경
+.venv/
+venv/
+env/
+ENV/
+
+# Jupyter
+.ipynb_checkpoints/
+*.ipynb
+
+# pytest / coverage
+.pytest_cache/
+.coverage
+htmlcov/
+.tox/
+
+# mypy
+.mypy_cache/
+
+# ── Node.js / Next.js ─────────────────────────────────────
+node_modules/
+.next/
+out/
+.nuxt/
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+.pnpm-debug.log*
+.vercel
+
+# ── 데이터 & 모델 파일 ────────────────────────────────────
+data/raw/
+data/processed/
+*.csv
+*.parquet
+*.h5
+*.pkl
+*.pt
+*.bin
+*.safetensors
+sample_flight_position.json
+
+# ── Docker ────────────────────────────────────────────────
+docker-compose.override.yml
+
+# ── IDE & OS ──────────────────────────────────────────────
+.idea/
+.vscode/
+*.swp
+*.swo
+.DS_Store
+Thumbs.db
+desktop.ini
+
+# ── 로그 ──────────────────────────────────────────────────
+logs/
+*.log
+
+# ── GCP / Terraform ───────────────────────────────────────
+.terraform/
+*.tfstate
+*.tfstate.backup
+terraform.tfvars
