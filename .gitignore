@@ -57,6 +57,7 @@ yarn-error.log*
 # ── 데이터 & 모델 파일 ────────────────────────────────────
 data/raw/
 data/processed/
+data/figures/
 *.csv
 *.parquet
 *.h5

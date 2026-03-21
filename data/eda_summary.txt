@@ -1,0 +1,39 @@
+============================================================
+SkyOps Intelligence — EDA 요약 보고서
+============================================================
+전체 항공편:       500,000편
+지연 (>0분):      194,222편  (38.8%)
+취소:              16,824편  (3.4%)
+
+[도착 지연 통계]
+  평균:        6.2분
+  중위수:       -4분
+  표준편차:   40.5분
+  최소:        -82분
+  최대:       1971분
+
+[지연 원인별 기여 비율]
+  항공사 귀책              :  31.2%  (1.84M분)
+  기상                  :   5.7%  (0.34M분)
+  국가항공시스템(NAS)        :  23.3%  (1.38M분)
+  보안                  :   0.1%  (0.01M분)
+  전편 지연               :  39.6%  (2.34M분)
+
+[결측치 상위 컬럼]
+  cancel_code                   :  96.6%
+  weather_delay_min             :  79.5%
+  late_aircraft_delay_min       :  79.5%
+  carrier_delay_min             :  79.5%
+  nas_delay_min                 :  79.5%
+  security_delay_min            :  79.5%
+  arr_delay_min                 :   3.6%
+  air_time_min                  :   3.6%
+  act_elapsed_min               :   3.6%
+  act_arr_time                  :   3.4%
+  taxi_in_min                   :   3.4%
+  wheels_on                     :   3.4%
+  wheels_off                    :   3.3%
+  taxi_out_min                  :   3.3%
+  dep_delay_min                 :   3.3%
+  act_dep_time                  :   3.3%
+  sched_elapsed_min             :   0.0%
