@@ -73,7 +73,26 @@ services:
       echo '>>> 완료!'
       "
 
+  # ------------------------------------------------------------------
+  # Redis — 항공기별 최신 상태 캐시 (Sorted Set)
+  # ------------------------------------------------------------------
+  redis:
+    image: redis:7.2-alpine
+    container_name: skyops-redis
+    restart: unless-stopped
+    ports:
+      - "6379:6379"
+    command: redis-server --appendonly yes --maxmemory 512mb --maxmemory-policy allkeys-lru
+    volumes:
+      - redis-data:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
 volumes:
   zookeeper-data:
   zookeeper-logs:
   kafka-data:
+  redis-data:
