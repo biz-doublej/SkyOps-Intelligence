@@ -1,0 +1,12 @@
+# SkyOps Intelligence - optional STT dependencies
+#
+# `openai-whisper==20231117` uses a legacy setup.py that imports
+# `pkg_resources`. Recent isolated build environments may not provide that
+# module, so install with:
+#   python -m pip install "setuptools<81" wheel
+#   python -m pip install --no-build-isolation -r llm_data/requirements_stt.txt
+#
+# Runtime note:
+#   `ffmpeg` / `ffprobe` must be installed and available on PATH.
+
+openai-whisper==20231117

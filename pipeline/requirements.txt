@@ -1,3 +1,13 @@
+# NOTE:
+# Install this file in a dedicated pipeline/stream-processing environment.
+# `apache-flink` depends on `apache-beam`, which requires older `numpy`
+# / `pyarrow` versions than the analysis stack.
+# Recommended:
+#   python -m venv .venv-pipeline
+#   .\.venv-pipeline\Scripts\Activate.ps1
+#   python -m pip install -U pip
+#   pip install -r pipeline/requirements.txt
+#
 # ── Kafka ──────────────────────────────────────────────────
 kafka-python==2.0.2
 

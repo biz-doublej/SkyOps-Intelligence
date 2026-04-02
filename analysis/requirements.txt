@@ -1,3 +1,14 @@
+# NOTE:
+# `analysis/requirements*.txt` and `pipeline/requirements.txt` must not be
+# installed into the same Python environment.
+# The analysis stack uses newer `numpy` / `pyarrow`, while `apache-flink`
+# pulls in `apache-beam`, which pins older versions and conflicts.
+# Recommended:
+#   python -m venv .venv-analysis
+#   .\.venv-analysis\Scripts\Activate.ps1
+#   python -m pip install -U pip
+#   pip install -r analysis/requirements.txt -r analysis/requirements_ml.txt
+#
 # ── 데이터 처리 ────────────────────────────────────────────
 pandas==2.2.2
 numpy==1.26.4

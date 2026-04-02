@@ -1,0 +1,12 @@
+# NOTE:
+# Install this file only inside the dedicated analysis/modeling environment.
+# Do not combine it with `pipeline/requirements.txt` in the same interpreter.
+#
+# ── 5주차 ML 모델링 추가 의존성 ───────────────────────────
+# pip install -r analysis/requirements_ml.txt
+
+xgboost==2.0.3
+optuna==3.6.1
+mlflow==2.13.2
+lightgbm==4.3.0          # 비교 모델용 (선택)
+shap==0.45.1              # Feature Importance 해석

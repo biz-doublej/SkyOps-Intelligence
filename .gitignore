@@ -29,6 +29,8 @@ dist/
 venv/
 env/
 ENV/
+llm_venv/
+analysis_venv/
 
 # Jupyter
 .ipynb_checkpoints/
@@ -82,9 +84,14 @@ desktop.ini
 # ── 로그 ──────────────────────────────────────────────────
 logs/
 *.log
+wandb/
 
 # ── GCP / Terraform ───────────────────────────────────────
 .terraform/
 *.tfstate
 *.tfstate.backup
 terraform.tfvars
+
+# ── LLM fine-tuning artifacts ─────────────────────────────
+data/models/llm/
+mlruns/

@@ -1,0 +1,18 @@
+{
+  "total": 15000,
+  "train": 12750,
+  "val": 1500,
+  "test": 750,
+  "source_counts": {
+    "atc_corpus": 0,
+    "qa": 0,
+    "anomaly_nl": 10000,
+    "passenger_ann": 5000
+  },
+  "type_counts": {
+    "passenger_announcement": 5000,
+    "anomaly_nl": 10000
+  },
+  "avg_instruction_len": 8.0,
+  "avg_output_len": 26.3
+}
