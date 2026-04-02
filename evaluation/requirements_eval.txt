@@ -1,0 +1,14 @@
+# SkyOps Intelligence — Evaluation dependencies
+# pip install -r evaluation/requirements_eval.txt
+
+# Core evaluation (no GPU required)
+# build_benchmark.py and compare_models.py use stdlib only
+
+# evaluate_model.py (GPU inference required)
+transformers>=4.40.0
+peft>=0.10.0
+accelerate>=0.28.0
+bitsandbytes>=0.43.0
+torch>=2.1.0
+sentencepiece
+protobuf

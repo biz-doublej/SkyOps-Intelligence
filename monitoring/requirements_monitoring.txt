@@ -1,0 +1,12 @@
+# SkyOps Intelligence — Monitoring dependencies
+# pip install -r monitoring/requirements_monitoring.txt
+
+# drift_detector.py (tabular mode optional)
+evidently>=0.4.20
+pandas>=2.0.0
+numpy>=1.24.0
+
+# slack_notifier.py — stdlib urllib only (no extra deps)
+
+# airflow DAG
+apache-airflow>=2.8.0
