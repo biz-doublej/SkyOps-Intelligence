@@ -1,0 +1,15 @@
+{
+  "drift_detected": false,
+  "signals": [],
+  "details": {
+    "ref_len_mean": 34.27,
+    "cur_len_mean": 34.27,
+    "len_z_score": 0.0,
+    "keyword_jsd": 0.0,
+    "vocab_drift": 0.0,
+    "ref_n": 12750,
+    "cur_n": 12750
+  },
+  "timestamp": "2026-04-02T01:08:29.061209Z",
+  "mode": "text"
+}

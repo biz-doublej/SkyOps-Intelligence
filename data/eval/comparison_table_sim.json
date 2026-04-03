@@ -1,0 +1,52 @@
+{
+  "base_tag": "BaselineSim",
+  "tuned_tag": "BaselineSim",
+  "metrics": [
+    {
+      "metric": "BLEU-1",
+      "base": 1.0,
+      "tuned": 1.0,
+      "delta": "+0.0000 (+0.0%)",
+      "improved": true
+    },
+    {
+      "metric": "BLEU-2",
+      "base": 1.0,
+      "tuned": 1.0,
+      "delta": "+0.0000 (+0.0%)",
+      "improved": true
+    },
+    {
+      "metric": "BLEU-4",
+      "base": 1.0,
+      "tuned": 1.0,
+      "delta": "+0.0000 (+0.0%)",
+      "improved": true
+    },
+    {
+      "metric": "ROUGE-L",
+      "base": 1.0,
+      "tuned": 1.0,
+      "delta": "+0.0000 (+0.0%)",
+      "improved": true
+    }
+  ],
+  "base_full": {
+    "tag": "BaselineSim",
+    "n_samples": 500,
+    "bleu_1": 1.0,
+    "bleu_2": 1.0,
+    "bleu_4": 1.0,
+    "rouge_l": 1.0,
+    "elapsed_sec": 0.0
+  },
+  "tuned_full": {
+    "tag": "BaselineSim",
+    "n_samples": 500,
+    "bleu_1": 1.0,
+    "bleu_2": 1.0,
+    "bleu_4": 1.0,
+    "rouge_l": 1.0,
+    "elapsed_sec": 0.0
+  }
+}

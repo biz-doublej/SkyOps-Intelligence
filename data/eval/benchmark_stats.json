@@ -1,0 +1,11 @@
+{
+  "total": 500,
+  "by_type": {
+    "anomaly": 331,
+    "announcement": 125,
+    "regulation": 44,
+    "atc": 0
+  },
+  "source_file": "C:\\Users\\jaewo\\Desktop\\SkyOps Intelligence\\data\\alpaca\\aviation_alpaca_test.jsonl",
+  "seed": 42
+}
