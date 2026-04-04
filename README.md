@@ -33,6 +33,17 @@ SkyOps Intelligence는 **항공 관제사를 위한 실시간 AI 파트너**입�
 
 > *"이상을 탐지하고, 원인을 설명하고, 대응 절차를 5초 이내에 자동 생성합니다."*
 
+### 📄 프로젝트 문서
+
+<table>
+<tr>
+<td align="center">📊<br><a href="docs/performance_benchmark.md"><b>성능 벤치마크</b></a><br><sub>XGBoost · IF · LLM · API 실측값</sub></td>
+<td align="center">🔍<br><a href="docs/limitations_and_improvements.md"><b>한계 및 개선 방향</b></a><br><sub>5개 영역 분석 + 개선 로드맵</sub></td>
+<td align="center">📋<br><a href="docs/policy_proposal.md"><b>정책 제안서</b></a><br><sub>항공사·공항 도입 3단계 방안</sub></td>
+<td align="center">📝<br><a href="docs/final_report.md"><b>최종 리포트</b></a><br><sub>13섹션 · APA 참고문헌 12건</sub></td>
+</tr>
+</table>
+
 ---
 
 ## 🏗️ 시스템 아키텍처 (5-Layer)
@@ -163,6 +174,12 @@ SkyOps Intelligence/
 │   │   └── shared/               # Card, MetricCard 등
 │   ├── src/hooks/                # WebSocket + SWR 데이터 훅
 │   └── src/lib/                  # 타입, API 클라이언트, 상수, Mock
+│
+├── 📄 docs/                       # 최종 산출물 문서
+│   ├── final_report.md            # 최종 리포트 (13섹션, 참고문헌 12건)
+│   ├── performance_benchmark.md   # 시스템 성능 벤치마크 (실측값)
+│   ├── limitations_and_improvements.md  # 한계 및 개선 방향 분석
+│   └── policy_proposal.md         # 항공사·공항 적용 정책 제안서
 │
 ├── docker-compose.yml            # Kafka + Zookeeper + Redis
 └── README.md                     # 이 파일
