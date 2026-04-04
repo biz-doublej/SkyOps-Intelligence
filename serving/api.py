@@ -28,7 +28,7 @@ from typing import Any, Optional
 import numpy as np
 import pandas as pd
 import uvicorn
-from fastapi import FastAPI, HTTPException
+from fastapi import FastAPI, HTTPException, WebSocket, WebSocketDisconnect
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel, Field
 
@@ -70,6 +70,50 @@ IF_SCORE_THRESHOLD = -0.1   # score < threshold → 이상
 # ── vLLM 설정 ─────────────────────────────────────────────────────────
 VLLM_BASE_URL = os.getenv("VLLM_BASE_URL", "http://localhost:8001/v1")
 LLM_MODEL_ID  = os.getenv("LLM_MODEL_ID",  "aviation-llm")
+
+
+# ── 한국어 후처리 (Qwen2.5 중국어 코드스위칭 대응) ────────────────────
+import re as _re
+
+def _clean_korean(text: str) -> str:
+    """중국어/영어 문장이 섞인 응답에서 한국어 문장만 추출."""
+    if not text:
+        return text
+    # 중국어 유니코드 범위: CJK Unified (4E00-9FFF), 확장 등
+    # 한국어: 가-힣 (AC00-D7A3), ㄱ-ㅎ, ㅏ-ㅣ
+    lines = text.split("\n")
+    cleaned = []
+    for line in lines:
+        stripped = line.strip()
+        if not stripped:
+            cleaned.append("")
+            continue
+        # 줄에서 중국어 비율 계산
+        chars = [c for c in stripped if not c.isspace() and not c.isdigit() and c not in ".,;:!?()-/·•[]{}\"'"]
+        if not chars:
+            cleaned.append(stripped)
+            continue
+        chinese_count = sum(1 for c in chars if "\u4e00" <= c <= "\u9fff")
+        korean_count = sum(1 for c in chars if "\uac00" <= c <= "\ud7a3" or "\u3131" <= c <= "\u3163")
+        total = len(chars)
+        # 중국어가 30% 이상이면 해당 줄 제거
+        if total > 0 and chinese_count / total > 0.3:
+            # 줄 앞부분에 한국어가 있으면 그 부분만 살리기
+            parts = _re.split(r"[\u4e00-\u9fff]{3,}", stripped)
+            if parts and parts[0].strip():
+                kr_part = parts[0].strip().rstrip(".,;:!? ")
+                if kr_part and any("\uac00" <= c <= "\ud7a3" for c in kr_part):
+                    cleaned.append(kr_part)
+            continue
+        cleaned.append(stripped)
+
+    result = "\n".join(cleaned).strip()
+    # 끝이 이상하게 잘린 경우 마지막 완성 문장까지만
+    if result and result[-1] not in ".!?。다요":
+        last_period = max(result.rfind("."), result.rfind("다."), result.rfind("요."), result.rfind("세요."))
+        if last_period > len(result) * 0.3:
+            result = result[:last_period + 1]
+    return result if result else text
 
 
 # ──────────────────────────────────────────────────────────────────────
@@ -423,7 +467,7 @@ def chat(req: ChatRequest):
             raise HTTPException(status_code=500, detail=f"RAG 응답 오류: {e}")
 
         return ChatResponse(
-            answer=result["answer"],
+            answer=_clean_korean(result["answer"]),
             sources=result["sources"],
             latency_ms=result["latency_ms"],
             rag_used=True,
@@ -435,8 +479,10 @@ def chat(req: ChatRequest):
         import urllib.request as ur
 
         SYSTEM = (
-            "당신은 AviationLLM입니다. 항공 관제사를 돕는 AI 어시스턴트입니다. "
-            "정확하고 간결하게 한국어로 답변하며, ATC 전문 용어를 사용합니다."
+            "당신은 AviationLLM — 대한민국 항공 관제사를 돕는 AI 어시스턴트입니다. "
+            "반드시 한국어로만 답변하세요. 절대 영어, 중국어 등 다른 언어를 사용하지 마세요. "
+            "ATC 전문 용어(Squawk, Go-Around, NOTAM, FL 등)는 원어 그대로 사용하되 설명은 한국어로 하세요. "
+            "불필요한 인사말 없이 바로 본론으로 답변하세요."
         )
         payload = {
             "model": LLM_MODEL_ID,
@@ -462,11 +508,144 @@ def chat(req: ChatRequest):
 
         latency = (time.time() - t0) * 1000
         return ChatResponse(
-            answer=answer,
+            answer=_clean_korean(answer),
             sources=[],
             latency_ms=round(latency, 1),
             rag_used=False,
         )
+
+
+# ──────────────────────────────────────────────────────────────────────
+# POST /explain/anomaly — 이상 탐지 LLM 자동 설명
+# ──────────────────────────────────────────────────────────────────────
+
+class AnomalyExplainRequest(BaseModel):
+    callsign: str = Field(..., description="항공편 콜사인")
+    anomaly_type: str = Field(..., description="이상 유형 (ALTITUDE_SPIKE, VELOCITY_SPIKE, PATH_DEVIATION)")
+    severity: str = Field(..., description="심각도 (LOW, MEDIUM, HIGH)")
+    description: str = Field(..., description="이상 설명")
+    altitude_m: float = Field(0)
+    velocity_m_s: float = Field(0)
+
+
+@app.post("/explain/anomaly", tags=["llm"])
+def explain_anomaly(req: AnomalyExplainRequest):
+    """이상 탐지 이벤트를 LLM으로 자동 설명 생성."""
+    import json as _j
+    import urllib.request as ur
+
+    TYPE_KR = {"ALTITUDE_SPIKE": "고도 급변", "VELOCITY_SPIKE": "속도 이상", "PATH_DEVIATION": "경로 이탈"}
+    SEV_KR = {"LOW": "낮음", "MEDIUM": "중간", "HIGH": "높음"}
+
+    SYSTEM = (
+        "당신은 대한민국 항공 관제사를 돕는 전문 AI입니다.\n"
+        "규칙:\n"
+        "- 반드시 한국어로만 답변하세요. 중국어 절대 금지. 영어도 금지.\n"
+        "- 항공 약어(ICAO, AIM, FL 등)만 영문 허용. 나머지는 모두 한국어.\n"
+        "- 형식: 1) 상황 요약 2) 원인 분석 3) 권고 대응 절차\n"
+        "- 반드시 3문장 이내로 간결하게 답변을 마치세요."
+    )
+    user_msg = (
+        f"아래 이상 탐지 결과를 관제사에게 한국어로 설명해 주세요.\n\n"
+        f"항공편: {req.callsign}\n"
+        f"이상 유형: {TYPE_KR.get(req.anomaly_type, req.anomaly_type)}\n"
+        f"심각도: {SEV_KR.get(req.severity, req.severity)}\n"
+        f"상세 내용: {req.description}\n"
+        f"현재 고도: {req.altitude_m}미터, 현재 속도: {req.velocity_m_s}미터/초"
+    )
+
+    t0 = time.time()
+    payload = {
+        "model": LLM_MODEL_ID,
+        "messages": [
+            {"role": "system", "content": SYSTEM},
+            {"role": "user", "content": user_msg},
+        ],
+        "max_tokens": 200,
+        "temperature": 0.2,
+    }
+    data = _j.dumps(payload).encode()
+    request = ur.Request(
+        f"{VLLM_BASE_URL}/chat/completions",
+        data=data,
+        headers={"Content-Type": "application/json"},
+    )
+    try:
+        with ur.urlopen(request, timeout=120) as r:
+            resp = _j.loads(r.read())
+        answer = resp["choices"][0]["message"]["content"]
+    except Exception as e:
+        raise HTTPException(status_code=502, detail=f"vLLM 호출 실패: {e}")
+
+    answer = _clean_korean(answer)
+    return {"explanation": answer, "latency_ms": round((time.time() - t0) * 1000, 1)}
+
+
+# ──────────────────────────────────────────────────────────────────────
+# POST /generate/announcement — 승객 안내문 자동 생성
+# ──────────────────────────────────────────────────────────────────────
+
+class AnnouncementRequest(BaseModel):
+    flight_number: str = Field(..., description="항공편명 (예: KE081)")
+    delay_type: str = Field(..., description="지연 유형 (weather, maintenance, traffic, crew, other)")
+    delay_minutes: int = Field(..., ge=0, description="예상 지연 시간 (분)")
+    details: str = Field("", description="추가 상세 정보")
+
+
+@app.post("/generate/announcement", tags=["llm"])
+def generate_announcement(req: AnnouncementRequest):
+    """승객 안내문 자동 생성."""
+    import json as _j
+    import urllib.request as ur
+
+    DELAY_LABELS = {
+        "weather": "기상 악화", "maintenance": "기체 정비",
+        "traffic": "항공 교통 혼잡", "crew": "승무원 사유", "other": "운항 사정",
+    }
+    reason = DELAY_LABELS.get(req.delay_type, req.delay_type)
+
+    SYSTEM = (
+        "당신은 대한민국 항공사의 승객 안내방송 작성 전문 AI입니다.\n"
+        "규칙:\n"
+        "- 한국어 안내문만 작성하세요. 중국어 사용 금지.\n"
+        "- 정중하고 전문적인 어조를 사용하세요.\n"
+        "- '승객 여러분'으로 시작하세요.\n"
+        "- 3~4문장으로 간결하게 작성하세요.\n"
+        "- 안전과 양해 감사 표현을 포함하세요."
+    )
+    user_msg = (
+        f"아래 상황에 맞는 승객 안내방송문을 한국어로 작성해 주세요.\n\n"
+        f"항공편명: {req.flight_number}\n"
+        f"지연 사유: {reason}\n"
+        f"예상 지연 시간: 약 {req.delay_minutes}분\n"
+        f"추가 정보: {req.details or '없음'}"
+    )
+
+    t0 = time.time()
+    payload = {
+        "model": LLM_MODEL_ID,
+        "messages": [
+            {"role": "system", "content": SYSTEM},
+            {"role": "user", "content": user_msg},
+        ],
+        "max_tokens": 500,
+        "temperature": 0.3,
+    }
+    data = _j.dumps(payload).encode()
+    request = ur.Request(
+        f"{VLLM_BASE_URL}/chat/completions",
+        data=data,
+        headers={"Content-Type": "application/json"},
+    )
+    try:
+        with ur.urlopen(request, timeout=120) as r:
+            resp = _j.loads(r.read())
+        answer = resp["choices"][0]["message"]["content"]
+    except Exception as e:
+        raise HTTPException(status_code=502, detail=f"vLLM 호출 실패: {e}")
+
+    answer = _clean_korean(answer)
+    return {"announcement": answer, "latency_ms": round((time.time() - t0) * 1000, 1)}
 
 
 # ──────────────────────────────────────────────────────────────────────
@@ -508,6 +687,177 @@ def predict_delay_batch(requests: list[DelayRequest]):
         "count":      len(preds),
         "latency_ms": round(latency, 1),
     }
+
+
+# ──────────────────────────────────────────────────────────────────────
+# 대시보드용 REST + WebSocket 엔드포인트
+# ──────────────────────────────────────────────────────────────────────
+
+import asyncio
+import json as _json
+
+# Redis 연결 (선택적 — 없으면 Mock 응답)
+_redis_client = None
+
+def _get_redis():
+    global _redis_client
+    if _redis_client is None:
+        try:
+            import redis
+            _redis_client = redis.Redis(
+                host=os.getenv("REDIS_HOST", "localhost"),
+                port=int(os.getenv("REDIS_PORT", 6379)),
+                decode_responses=True,
+            )
+            _redis_client.ping()
+        except Exception:
+            _redis_client = None
+    return _redis_client
+
+
+def _safe_float(val, default=0.0) -> float:
+    try:
+        return float(val) if val else default
+    except (ValueError, TypeError):
+        return default
+
+
+def _read_aircraft_from_redis() -> list[dict]:
+    """Redis에서 항공기 위치 데이터 조회."""
+    r = _get_redis()
+    if r is None:
+        return []
+    try:
+        cutoff = time.time() - 600  # 최근 10분
+        icao_list = r.zrangebyscore("skyops:aircraft:latest", cutoff, "+inf")
+        result = []
+        for icao in icao_list[:200]:
+            state = r.hgetall(f"skyops:aircraft:state:{icao}")
+            if not state or not state.get("latitude"):
+                continue
+            result.append({
+                "icao24": icao,
+                "callsign": state.get("callsign", ""),
+                "latitude": _safe_float(state.get("latitude")),
+                "longitude": _safe_float(state.get("longitude")),
+                "baro_altitude": _safe_float(state.get("baro_altitude")),
+                "velocity": _safe_float(state.get("velocity")),
+                "on_ground": state.get("on_ground", "false") == "true",
+                "true_track": _safe_float(state.get("true_track")),
+                "vertical_rate": _safe_float(state.get("vertical_rate")),
+                "updated_at": _safe_float(state.get("updated_at")),
+            })
+        return result
+    except Exception as e:
+        import traceback
+        traceback.print_exc()
+        return []
+
+
+def _read_anomalies_from_redis(limit: int = 50) -> list[dict]:
+    """Redis에서 최근 이상 탐지 이벤트 조회."""
+    r = _get_redis()
+    if r is None:
+        return []
+    try:
+        raw = r.lrange("skyops:anomaly:stream", 0, limit - 1)
+        return [_json.loads(item) for item in raw if item]
+    except Exception:
+        return []
+
+
+@app.get("/aircraft/live", tags=["dashboard"])
+def get_aircraft_live():
+    """실시간 항공기 위치 (Redis 조회)."""
+    return _read_aircraft_from_redis()
+
+
+@app.get("/aircraft/h3", tags=["dashboard"])
+def get_aircraft_h3(resolution: int = 5):
+    """항공기 위치를 H3 헥사곤으로 집계하여 반환."""
+    try:
+        import h3
+    except ImportError:
+        raise HTTPException(status_code=500, detail="h3 라이브러리 미설치: pip install h3")
+
+    aircraft = _read_aircraft_from_redis()
+    if not aircraft:
+        return []
+
+    hex_counts: dict[str, dict] = {}
+    for a in aircraft:
+        lat, lng = a.get("latitude", 0), a.get("longitude", 0)
+        if lat == 0 and lng == 0:
+            continue
+        h3_index = h3.latlng_to_cell(lat, lng, resolution)
+        if h3_index not in hex_counts:
+            cell_lat, cell_lng = h3.cell_to_latlng(h3_index)
+            hex_counts[h3_index] = {
+                "hex_id": h3_index,
+                "latitude": cell_lat,
+                "longitude": cell_lng,
+                "count": 0,
+                "avg_altitude": 0,
+                "avg_velocity": 0,
+                "callsigns": [],
+            }
+        entry = hex_counts[h3_index]
+        entry["count"] += 1
+        entry["callsigns"].append(a.get("callsign", ""))
+        entry["avg_altitude"] += a.get("baro_altitude", 0)
+        entry["avg_velocity"] += a.get("velocity", 0)
+
+    for entry in hex_counts.values():
+        n = entry["count"]
+        if n > 0:
+            entry["avg_altitude"] = round(entry["avg_altitude"] / n, 1)
+            entry["avg_velocity"] = round(entry["avg_velocity"] / n, 1)
+        entry["callsigns"] = entry["callsigns"][:5]
+
+    return list(hex_counts.values())
+
+
+@app.get("/anomaly/recent", tags=["dashboard"])
+def get_anomaly_recent(limit: int = 50):
+    """최근 이상 탐지 이벤트 (Redis 조회)."""
+    return _read_anomalies_from_redis(limit)
+
+
+@app.websocket("/ws/aircraft")
+async def ws_aircraft(websocket: WebSocket):
+    """3초 간격 항공기 위치 WebSocket push."""
+    await websocket.accept()
+    try:
+        while True:
+            data = _read_aircraft_from_redis()
+            await websocket.send_json(data)
+            await asyncio.sleep(3)
+    except WebSocketDisconnect:
+        pass
+    except Exception:
+        pass
+
+
+@app.websocket("/ws/anomalies")
+async def ws_anomalies(websocket: WebSocket):
+    """1초 간격 신규 이상 이벤트 WebSocket push."""
+    await websocket.accept()
+    last_count = 0
+    try:
+        while True:
+            r = _get_redis()
+            if r:
+                current_count = r.llen("skyops:anomaly:stream") or 0
+                if current_count > last_count:
+                    new_count = current_count - last_count
+                    data = _read_anomalies_from_redis(new_count)
+                    await websocket.send_json(data)
+                    last_count = current_count
+            await asyncio.sleep(1)
+    except WebSocketDisconnect:
+        pass
+    except Exception:
+        pass
 
 
 # ──────────────────────────────────────────────────────────────────────

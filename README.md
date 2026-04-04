@@ -7,6 +7,7 @@
 *2026학년도 1학기 캡스톤디자인 | DoubleJ팀 | 빅데이터과*
 
 [![Python](https://img.shields.io/badge/Python-3.11-3776AB?style=flat-square&logo=python&logoColor=white)](https://python.org)
+[![Next.js](https://img.shields.io/badge/Next.js-16-000000?style=flat-square&logo=next.js&logoColor=white)](https://nextjs.org)
 [![FastAPI](https://img.shields.io/badge/FastAPI-0.111-009688?style=flat-square&logo=fastapi&logoColor=white)](https://fastapi.tiangolo.com)
 [![LangChain](https://img.shields.io/badge/LangChain-1.2-1C3C3C?style=flat-square&logo=langchain&logoColor=white)](https://langchain.com)
 [![XGBoost](https://img.shields.io/badge/XGBoost-2.0-FF6600?style=flat-square)](https://xgboost.ai)
@@ -26,7 +27,9 @@ SkyOps Intelligence는 **항공 관제사를 위한 실시간 AI 파트너**입�
 - 🛫 **15분 선행 지연 예측** — XGBoost + Kafka/Flink 스트리밍 파이프라인
 - 🚨 **실시간 이상 탐지** — Isolation Forest + CEP 룰 앙상블
 - 🤖 **자연어 원인 설명** — 항공 도메인 특화 LLM (Qwen2.5-7B QLoRA+DPO) + RAG
-- 📡 **REST API 서빙** — FastAPI + vLLM + ChromaDB
+- 📡 **REST / WebSocket API** — FastAPI + vLLM + ChromaDB
+- 🗺️ **실시간 관제 대시보드** — Next.js + Leaflet 라이브맵 + MapLibre H3 히트맵
+- 📢 **AI 승객 안내문 생성** — 지연 유형별 자동 안내방송문 생성
 
 > *"이상을 탐지하고, 원인을 설명하고, 대응 절차를 5초 이내에 자동 생성합니다."*
 
@@ -55,13 +58,17 @@ SkyOps Intelligence는 **항공 관제사를 위한 실시간 AI 파트너**입�
                            │  FastAPI REST / WebSocket
 ┌──────────────────────────▼──────────────────────────────────────────┐
 │                        Layer 4 · 서빙                                │
-│    POST /predict/delay  ·  POST /detect/anomaly  ·  POST /chat       │
+│   POST /predict/delay  ·  POST /detect/anomaly  ·  POST /chat       │
+│   POST /explain/anomaly  ·  POST /generate/announcement             │
+│   WS /ws/aircraft  ·  WS /ws/anomalies  ·  GET /aircraft/h3        │
 │              Prometheus /metrics  ·  Batch /predict/delay/batch      │
 └──────────────────────────┬──────────────────────────────────────────┘
                            │
 ┌──────────────────────────▼──────────────────────────────────────────┐
 │                       Layer 5 · 대시보드                              │
-│   Next.js 관제 대시보드  ·  Kepler.gl H3 혼잡도 히트맵  ·  챗봇 UI    │
+│   Next.js 실시간 관제 대시보드  ·  MapLibre H3 히트맵  ·  AI 챗봇 UI  │
+│   Leaflet 항공기 라이브맵  ·  이상 탐지 피드  ·  지연 예측 폼           │
+│            승객 안내문 자동 생성  ·  시나리오 3종 데모                   │
 └─────────────────────────────────────────────────────────────────────┘
 ```
 
@@ -131,15 +138,31 @@ SkyOps Intelligence/
 │   ├── drift_detector.py         # EvidentlyAI 드리프트 감지
 │   └── slack_notifier.py         # Slack Webhook 알림
 │
-├── 🚀 serving/                   # Phase 3 · 서빙 (10주차)
+├── 🚀 serving/                   # Phase 3 · API 서빙
 │   ├── 01_merge_model.py         # LoRA 어댑터 병합
 │   ├── 02_quantize_awq.py        # AWQ 4-bit 양자화
-│   ├── 03_run_vllm.sh            # vLLM 서버 실행 (GPU/CPU 모드)
+│   ├── 03_run_vllm.sh            # vLLM 서버 실행
 │   ├── 03_test_vllm.py           # vLLM API 동작 테스트
 │   ├── 04_build_vectordb.py      # ChromaDB 벡터 DB 구축
-│   ├── 05_rag_chain.py           # LangChain RAG 체인
-│   ├── api.py                    # FastAPI 메인 애플리케이션
+│   ├── 05_rag_chain.py           # LangChain RAG 체인 (LCEL)
+│   ├── api.py                    # FastAPI 메인 (REST + WebSocket)
 │   └── requirements.txt          # 서빙 의존성
+│
+├── 🖥️ dashboard/                 # Phase 3 · Next.js 대시보드
+│   ├── src/app/                  # 6개 페이지 (App Router)
+│   │   ├── page.tsx              # 대시보드 개요 (KPI 카드)
+│   │   ├── map/page.tsx          # Leaflet 항공기 라이브맵
+│   │   ├── anomaly/page.tsx      # 이상 탐지 피드 + AI 분석 버튼
+│   │   ├── predict/page.tsx      # 지연 예측 폼 + 결과 표시
+│   │   ├── heatmap/page.tsx      # MapLibre H3 혼잡도 히트맵
+│   │   └── chat/page.tsx         # AI 관제 어시스턴트 + 승객 안내문
+│   ├── src/components/           # 재사용 컴포넌트
+│   │   ├── layout/Sidebar.tsx    # 한국어 네비게이션 사이드바
+│   │   ├── map/AircraftMap.tsx   # Leaflet 항공기 마커 지도
+│   │   ├── map/HeatmapGL.tsx     # MapLibre GL 히트맵
+│   │   └── shared/               # Card, MetricCard 등
+│   ├── src/hooks/                # WebSocket + SWR 데이터 훅
+│   └── src/lib/                  # 타입, API 클라이언트, 상수, Mock
 │
 ├── docker-compose.yml            # Kafka + Zookeeper + Redis
 └── README.md                     # 이 파일
@@ -151,148 +174,117 @@ SkyOps Intelligence/
 
 ### 사전 요구사항
 
-- Python 3.11+
+- Python 3.11+, Node.js 18+
 - CUDA 호환 GPU (vLLM 서빙 시 / CPU 모드 가능)
 - Docker & Docker Compose (Kafka 스택)
 
-### 1. Kafka 스택 기동
+### 1. 인프라 기동
 
 ```bash
-docker-compose up -d
+docker-compose up -d          # Kafka + Redis 컨테이너
 ```
 
-### 2. 서빙 환경 설치
+### 2. 실시간 파이프라인 실행
 
 ```bash
-cd serving
-pip install -r requirements.txt
+python pipeline/opensky_producer.py    # OpenSky → Kafka (터미널 1)
+python pipeline/flink_processor.py     # Kafka → Redis (터미널 2)
 ```
 
-### 3. GPU 서빙 (풀 파이프라인)
+### 3. vLLM 서버 (Docker)
 
 ```bash
-# ① LoRA 어댑터 병합
-python 01_merge_model.py
-
-# ② AWQ 4-bit 양자화
-python 02_quantize_awq.py
-
-# ③ ChromaDB 구축
-python 04_build_vectordb.py
-
-# ④ vLLM 서버 기동 (백그라운드)
-bash 03_run_vllm.sh awq
-
-# ⑤ vLLM 동작 확인
-python 03_test_vllm.py
-
-# ⑥ FastAPI 서버
-uvicorn api:app --host 0.0.0.0 --port 8000 --reload
+docker run --gpus all --rm -p 8001:8001 \
+  -v "$(pwd):/workspace" \
+  vllm/vllm-openai:latest \
+  --model /workspace/data/models/llm/qwen25_7b_awq \
+  --served-model-name aviation-llm \
+  --quantization awq_marlin \
+  --host 0.0.0.0 --port 8001 \
+  --gpu-memory-utilization 0.82 \
+  --max-model-len 2048 \
+  --dtype float16 --trust-remote-code
 ```
 
-### 4. CPU 데모 (GPU 없이)
+### 4. FastAPI 서버
 
 ```bash
-# ChromaDB 구축 (CPU)
-python 04_build_vectordb.py
+pip install -r serving/requirements.txt
+python serving/api.py                  # http://localhost:8000
+```
 
-# FastAPI 서버 바로 실행 (/predict/delay, /detect/anomaly 사용 가능)
-uvicorn api:app --host 0.0.0.0 --port 8000 --reload
+### 5. Next.js 대시보드
+
+```bash
+cd dashboard
+npm install
+npm run dev                            # http://localhost:3000
 ```
 
 ---
 
 ## 🔌 API 엔드포인트
 
-서버 기동 후 → **`http://localhost:8000/docs`** (Swagger UI 자동 생성)
+서버 기동 후 → **`http://localhost:8000/docs`** (Swagger UI)
 
-### `GET /health`
-서버 상태 및 로드된 모델 확인
+| 메서드 | 경로 | 설명 |
+|--------|------|------|
+| `GET` | `/health` | 서버 상태 및 모델 가용성 |
+| `POST` | `/predict/delay` | XGBoost 지연 예측 |
+| `POST` | `/predict/delay/batch` | 배치 지연 예측 (최대 100건) |
+| `POST` | `/detect/anomaly` | Isolation Forest 이상 탐지 |
+| `POST` | `/chat` | RAG 기반 AI 관제 어시스턴트 |
+| `POST` | `/explain/anomaly` | 이상 탐지 LLM 자동 설명 |
+| `POST` | `/generate/announcement` | 승객 안내문 자동 생성 |
+| `GET` | `/aircraft/live` | Redis 실시간 항공기 위치 |
+| `GET` | `/aircraft/h3` | H3 헥사곤 밀집도 집계 |
+| `GET` | `/anomaly/recent` | 최근 이상 탐지 이벤트 |
+| `WS` | `/ws/aircraft` | 항공기 위치 WebSocket (3초) |
+| `WS` | `/ws/anomalies` | 이상 이벤트 WebSocket (1초) |
+| `GET` | `/metrics` | Prometheus 메트릭 |
+
+### 사용 예시
 
 ```bash
-curl http://localhost:8000/health
-```
-
-### `POST /predict/delay` — 지연 예측
-
-```bash
+# 지연 예측
 curl -X POST http://localhost:8000/predict/delay \
   -H "Content-Type: application/json" \
   -d '{
-    "dep_hour": 18, "dep_minute": 30, "dep_dayofweek": 4,
-    "dep_month": 7, "dep_dayofyear": 195, "is_weekend": 0,
-    "distance_miles": 850, "sched_elapsed_min": 120,
-    "prev_dep_delay_min": 15, "prev_arr_delay_min": 10, "is_prev_delayed": 1,
-    "origin_hourly_departures": 12, "dest_hourly_arrivals": 10,
+    "dep_hour": 14, "dep_minute": 30, "dep_dayofweek": 1,
+    "dep_month": 4, "dep_dayofyear": 95, "is_weekend": 0,
+    "distance_miles": 200, "sched_elapsed_min": 75,
+    "prev_dep_delay_min": 5, "prev_arr_delay_min": 3, "is_prev_delayed": 0,
+    "origin_hourly_departures": 25, "dest_hourly_arrivals": 20,
     "dep_month_weather_score": 0.3,
-    "origin_weather_hist_delay": 5.2, "dest_weather_hist_delay": 3.1,
-    "carrier_hist_delay": 8.4, "origin_hist_delay": 6.1,
-    "dest_hist_delay": 4.9, "route_hist_delay": 7.2,
-    "carrier_code": "AA", "origin": "JFK", "dest": "LAX"
+    "origin_weather_hist_delay": 5.2, "dest_weather_hist_delay": 4.1,
+    "carrier_hist_delay": 8.5, "origin_hist_delay": 6.3,
+    "dest_hist_delay": 5.8, "route_hist_delay": 7.2,
+    "carrier_code": "KE", "origin": "ICN", "dest": "CJU"
   }'
-```
 
-**응답:**
-```json
-{
-  "flight_id": null,
-  "predicted_delay_minutes": 18.4,
-  "is_delayed": true,
-  "delay_probability": 0.73,
-  "risk_level": "warning",
-  "model_version": "xgboost_v1"
-}
-```
-
-### `POST /detect/anomaly` — 이상 탐지
-
-```bash
-curl -X POST http://localhost:8000/detect/anomaly \
-  -H "Content-Type: application/json" \
-  -d '{
-    "dep_hour": 2, "dep_dayofweek": 6, "distance_miles": 4500,
-    "sched_elapsed_min": 600, "prev_dep_delay_min": 180,
-    "prev_arr_delay_min": 200, "is_prev_delayed": 1,
-    "origin_hourly_departures": 1, "dest_hourly_arrivals": 1,
-    "dep_month_weather_score": 0.9,
-    "origin_weather_hist_delay": 25, "dest_weather_hist_delay": 20,
-    "carrier_hist_delay": 30, "origin_hist_delay": 28,
-    "dest_hist_delay": 22, "route_hist_delay": 35
-  }'
-```
-
-**응답:**
-```json
-{
-  "flight_id": null,
-  "is_anomaly": true,
-  "anomaly_score": -0.31,
-  "risk_level": "critical",
-  "message": "비정상 운항 패턴 감지됨"
-}
-```
-
-### `POST /chat` — AI 관제 어시스턴트 (vLLM 필요)
-
-```bash
+# AI 채팅 (RAG)
 curl -X POST http://localhost:8000/chat \
   -H "Content-Type: application/json" \
-  -d '{"query": "KE123편 고도 급변 이상 탐지 시 대응 절차를 알려주세요.", "use_rag": true}'
-```
+  -d '{"question": "비상 선언 항공기 대응 절차를 알려주세요.", "use_rag": true}'
 
-### `POST /predict/delay/batch` — 배치 예측 (최대 100건)
-
-```bash
-curl -X POST http://localhost:8000/predict/delay/batch \
+# 승객 안내문 생성
+curl -X POST http://localhost:8000/generate/announcement \
   -H "Content-Type: application/json" \
-  -d '{"flights": [{ ... }, { ... }]}'
+  -d '{"flight_number": "KE081", "delay_type": "weather", "delay_minutes": 38, "details": "강풍 45노트"}'
 ```
 
-### `GET /metrics` — Prometheus 메트릭
+---
 
-```bash
-curl http://localhost:8000/metrics
-```
+## 🖥️ 대시보드 페이지
+
+| 페이지 | 경로 | 기능 |
+|--------|------|------|
+| 대시보드 개요 | `/` | KPI 카드 4종 + 최근 알림 + 항공기 요약 |
+| 실시간 지도 | `/map` | Leaflet 라이브맵 (WebSocket + SWR fallback) |
+| 이상 탐지 | `/anomaly` | 실시간 알림 피드 + 심각도 필터 + AI 분석 버튼 |
+| 지연 예측 | `/predict` | 항공사/공항 선택 폼 + XGBoost 결과 표시 |
+| 혼잡도 맵 | `/heatmap` | MapLibre GL H3 Resolution 5 히트맵 (5초 갱신) |
+| AI 어시스턴트 | `/chat` | RAG 채팅 + 시나리오 3종 + 승객 안내문 생성 사이드패널 |
 
 ---
 
@@ -304,12 +296,13 @@ curl http://localhost:8000/metrics
 | **스트리밍** | Apache Kafka, PyFlink (5분 윈도우), Redis |
 | **ML 모델** | XGBoost + Optuna, Isolation Forest, SHAP |
 | **LLM** | Qwen2.5-7B-Instruct, QLoRA (TRL SFTTrainer), DPO |
-| **LLM 서빙** | vLLM (AWQ 4-bit), OpenAI 호환 API |
-| **RAG** | LangChain, ChromaDB, BAAI/bge-m3 임베딩 |
-| **API** | FastAPI, Pydantic v2, Uvicorn |
-| **MLOps** | MLflow, Airflow, EvidentlyAI, Prometheus + Grafana |
-| **인프라** | Docker, GCP Cloud Run, GitHub Actions |
-| **대시보드** | Next.js, Kepler.gl, WebSocket |
+| **LLM 서빙** | vLLM (AWQ 4-bit, awq_marlin), OpenAI 호환 API |
+| **RAG** | LangChain LCEL, ChromaDB, BAAI/bge-m3 임베딩 |
+| **API** | FastAPI, Pydantic v2, Uvicorn, WebSocket |
+| **대시보드** | Next.js 16 (App Router), TypeScript, Tailwind CSS |
+| **지도** | react-leaflet (항공기), MapLibre GL (히트맵), CartoDB Dark Matter |
+| **MLOps** | MLflow, Airflow, EvidentlyAI, Prometheus |
+| **인프라** | Docker, Docker Compose, vLLM Docker |
 
 ---
 
@@ -326,7 +319,9 @@ curl http://localhost:8000/metrics
 | 7주차 | ATC 교신 STT + ICAO 파싱 + GPT-4 QA 생성 | 데이터셋 **13,969건** |
 | 8주차 | Qwen2.5-7B QLoRA 파인튜닝 (9시간) | Train Loss **0.1053** |
 | 9주차 | ROUGE-L 평가 + DPO 정렬 (12시간) + Airflow DAG | ROUGE-L **0.169** |
-| 10주차 | vLLM 서빙 + ChromaDB RAG + FastAPI 완성 | `serving/api.py` |
+| 10주차 | vLLM AWQ 서빙 + ChromaDB RAG + FastAPI 완성 | `serving/api.py` |
+| 11주차 | Next.js 대시보드 + Leaflet 라이브맵 + H3 히트맵 | `dashboard/` |
+| 12주차 | AI 어시스턴트 UI + 이상 설명 + 승객 안내문 생성 | 시나리오 3종 |
 
 ---
 
@@ -336,7 +331,7 @@ curl http://localhost:8000/metrics
 |------|------|
 | 팀장 / 풀스택 | 정재원 |
 
-**지도교수:** 빅데이터과 담당 교수님
+**지도교수:** 조상구 (빅데이터과)
 **학교:** 캡스톤디자인 2026학년도 1학기
 
 ---

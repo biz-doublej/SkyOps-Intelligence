@@ -58,8 +58,8 @@ def merge(adapter_path: str, output_path: str, base_model: str) -> None:
     base = AutoModelForCausalLM.from_pretrained(
         base_model,
         torch_dtype=torch.bfloat16,
-        device_map="auto",
         trust_remote_code=True,
+        low_cpu_mem_usage=True,
     )
 
     # 3. LoRA 어댑터 로드 후 병합

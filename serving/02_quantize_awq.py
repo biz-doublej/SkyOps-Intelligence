@@ -22,6 +22,24 @@ import argparse
 import time
 from pathlib import Path
 
+# autoawq 버전 호환성 패치 (AwqQuantizer n_samples 이슈 해결)
+# autoawq 내부에서 n_samples/seqlen을 지원하지 않는 AwqQuantizer로 전달할 때 발생하는 TypeError 방지
+def _patch_awq_compatibility():
+    try:
+        from awq.quantizer import AwqQuantizer
+        _original_init = AwqQuantizer.__init__
+
+        def _patched_init(self, *args, **kwargs):
+            kwargs.pop('n_samples', None)
+            kwargs.pop('seqlen', None)
+            _original_init(self, *args, **kwargs)
+
+        AwqQuantizer.__init__ = _patched_init
+    except Exception:
+        pass  # 패치 실패 시 무시
+
+_patch_awq_compatibility()
+
 PROJECT_ROOT   = Path(__file__).parent.parent
 DEFAULT_MODEL  = str(PROJECT_ROOT / "data/models/llm/qwen25_7b_merged")
 DEFAULT_OUTPUT = str(PROJECT_ROOT / "data/models/llm/qwen25_7b_awq")
@@ -89,10 +107,32 @@ def quantize(model_path: str, output_path: str) -> None:
     )
 
     print("[3/4] AWQ 캘리브레이션 + 양자화 실행...")
+
+    # autoawq 최신 버전에서 n_samples/seqlen 인자를 제거한 경우 대비 패치
+    # (model/tokenizer 로드 후 적용해야 내부 모듈 참조가 확실히 교체됨)
+    try:
+        from awq.quantize.quantizer import AwqQuantizer as _AQ
+    except ImportError:
+        from awq.quantizer import AwqQuantizer as _AQ
+
+    import inspect
+    _sig = inspect.signature(_AQ.__init__)
+    if "n_samples" not in _sig.parameters:
+        _orig_init = _AQ.__init__
+
+        def _patched_init(self, *args, **kwargs):
+            kwargs.pop("n_samples", None)
+            kwargs.pop("seqlen", None)
+            _orig_init(self, *args, **kwargs)
+
+        _AQ.__init__ = _patched_init
+
+    # 캘리브레이션 데이터를 충분히 확보하기 위해 반복 확장
+    expanded_calib = CALIB_DATA * 20  # 20문장 × 20 = 400문장 (~12,000 토큰)
     model.quantize(
         tokenizer,
         quant_config=AWQ_CONFIG,
-        calib_data=CALIB_DATA,
+        calib_data=expanded_calib,
     )
 
     print(f"[4/4] 양자화 모델 저장 → {output_path}")

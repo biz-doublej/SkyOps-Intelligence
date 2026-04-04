@@ -1,0 +1,3 @@
+﻿FROM pytorch/pytorch:2.5.1-cuda12.4-cudnn9-runtime
+RUN pip install "transformers==4.51.3" "accelerate==0.34.2" "autoawq==0.2.7.post3" "protobuf" --quiet
+WORKDIR /workspace/serving

@@ -9,7 +9,7 @@ FastAPI(api.py)에서 import 하여 사용합니다.
     python serving/05_rag_chain.py
 
 요구사항:
-    pip install langchain langchain-openai langchain-community chromadb sentence-transformers
+    pip install langchain-openai langchain-community chromadb sentence-transformers
 """
 
 from __future__ import annotations
@@ -34,21 +34,25 @@ MAX_TOKENS    = 512
 TEMPERATURE   = 0.2
 
 
-SYSTEM_PROMPT = """당신은 AviationLLM입니다. 항공 관제사를 돕는 AI 어시스턴트로,
-아래 컨텍스트(FAA AIM / ICAO SOP / NOTAM)를 참조하여 정확하고 간결하게 답변합니다.
-컨텍스트에 없는 내용은 일반 항공 지식으로 보완하되, 불확실한 경우 명시하세요.
-답변은 한국어로 작성하며, ATC 전문 용어를 적절히 사용합니다."""
+SYSTEM_PROMPT = """당신은 AviationLLM — 대한민국 항공 관제사를 돕는 AI 어시스턴트입니다.
+
+[핵심 규칙]
+1. 반드시 한국어로만 답변하세요. 절대 영어, 중국어 등 다른 언어를 사용하지 마세요.
+2. ATC 전문 용어(예: Squawk, Go-Around, NOTAM, FL)는 원어 그대로 사용하되, 설명은 한국어로 하세요.
+3. 아래 참조 문서를 기반으로 정확하고 간결하게 답변하세요.
+4. 참조 문서에 없는 내용은 일반 항공 지식으로 보완하되, 불확실한 경우 "확인이 필요합니다"라고 명시하세요.
+5. 답변 형식: 핵심 내용 먼저, 부가 설명은 뒤에. 불필요한 인사말 없이 바로 본론으로."""
 
 
 # ── RAG 체인 클래스 ───────────────────────────────────────────────────
 
 class AviationRAGChain:
-    """ChromaDB + vLLM 기반 항공 도메인 RAG 체인"""
+    """ChromaDB + vLLM 기반 항공 도메인 RAG 체인 (LCEL 기반)"""
 
     def __init__(self) -> None:
         self._vectorstore  = None
         self._llm          = None
-        self._chain        = None
+        self._retriever    = None
         self._initialized  = False
 
     # ── 지연 초기화 ──────────────────────────────────────────────────
@@ -59,14 +63,11 @@ class AviationRAGChain:
         from langchain_openai import ChatOpenAI
         from langchain_community.vectorstores import Chroma
         from langchain_community.embeddings import HuggingFaceEmbeddings
-        from langchain.chains import RetrievalQA
-        from langchain.prompts import ChatPromptTemplate, HumanMessagePromptTemplate
-        from langchain_core.messages import SystemMessage
 
         # 1. 임베딩 모델 (로컬)
         embeddings = HuggingFaceEmbeddings(
             model_name=EMBED_MODEL,
-            model_kwargs={"device": "cpu"},   # 임베딩은 CPU 사용
+            model_kwargs={"device": "cpu"},
             encode_kwargs={"normalize_embeddings": True},
         )
 
@@ -77,34 +78,20 @@ class AviationRAGChain:
             persist_directory=VECTORDB_DIR,
         )
 
-        # 3. vLLM OpenAI 호환 LLM
+        # 3. Retriever
+        self._retriever = self._vectorstore.as_retriever(
+            search_type="similarity",
+            search_kwargs={"k": TOP_K},
+        )
+
+        # 4. vLLM OpenAI 호환 LLM
         self._llm = ChatOpenAI(
             openai_api_base=VLLM_BASE_URL,
-            openai_api_key="dummy",        # vLLM은 키 불필요
+            openai_api_key="dummy",
             model_name=LLM_MODEL_ID,
             temperature=TEMPERATURE,
             max_tokens=MAX_TOKENS,
             streaming=False,
-        )
-
-        # 4. RAG 프롬프트 템플릿
-        prompt = ChatPromptTemplate.from_messages([
-            SystemMessage(content=SYSTEM_PROMPT),
-            HumanMessagePromptTemplate.from_template(
-                "### 참조 문서\n{context}\n\n### 질문\n{question}"
-            ),
-        ])
-
-        # 5. RetrievalQA 체인
-        self._chain = RetrievalQA.from_chain_type(
-            llm=self._llm,
-            chain_type="stuff",
-            retriever=self._vectorstore.as_retriever(
-                search_type="similarity",
-                search_kwargs={"k": TOP_K},
-            ),
-            chain_type_kwargs={"prompt": prompt},
-            return_source_documents=True,
         )
 
         self._initialized = True
@@ -112,22 +99,36 @@ class AviationRAGChain:
     # ── 퍼블릭 API ───────────────────────────────────────────────────
 
     def query(self, question: str) -> dict[str, Any]:
-        """질문에 대한 RAG 응답 반환.
-
-        Returns:
-            {
-                "answer":   str,
-                "sources":  [{"source": str, "section": str, "text": str}],
-                "latency_ms": float,
-            }
-        """
+        """질문에 대한 RAG 응답 반환."""
         self._init()
         t0 = time.time()
-        result = self._chain.invoke({"query": question})
+
+        # 1. 문서 검색
+        docs = self._retriever.invoke(question)
+
+        # 2. 컨텍스트 구성
+        context_parts = []
+        for i, doc in enumerate(docs, 1):
+            meta = doc.metadata
+            context_parts.append(
+                f"[{i}] [{meta.get('source','')}] {meta.get('section','')}\n"
+                f"{doc.page_content}"
+            )
+        context = "\n\n".join(context_parts)
+
+        # 3. LLM 호출
+        messages = [
+            {"role": "system", "content": SYSTEM_PROMPT},
+            {"role": "user", "content": f"### 참조 문서\n{context}\n\n### 질문\n{question}"},
+        ]
+        response = self._llm.invoke(messages)
+        answer = response.content
+
         latency = (time.time() - t0) * 1000
 
+        # 4. 소스 정보
         sources = []
-        for doc in result.get("source_documents", []):
+        for doc in docs:
             sources.append({
                 "source":  doc.metadata.get("source", ""),
                 "section": doc.metadata.get("section", ""),
@@ -136,13 +137,13 @@ class AviationRAGChain:
             })
 
         return {
-            "answer":     result["result"],
+            "answer":     answer,
             "sources":    sources,
             "latency_ms": round(latency, 1),
         }
 
     def retrieve_context(self, query: str, k: int = TOP_K) -> str:
-        """검색된 문서들을 단일 컨텍스트 문자열로 반환 (FastAPI /chat 용)."""
+        """검색된 문서들을 단일 컨텍스트 문자열로 반환."""
         self._init()
         docs = self._vectorstore.similarity_search(query, k=k)
         parts = []
