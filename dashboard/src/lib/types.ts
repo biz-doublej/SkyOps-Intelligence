@@ -53,10 +53,19 @@ export interface DelayRequest {
   dest: string;
 }
 
+export interface PredictionInterval {
+  lower_min: number;
+  upper_min: number;
+  confidence: number; // 0.0 ~ 1.0 (e.g. 0.9 = 90%)
+  width_min: number;
+  method: string; // e.g. "split_conformal_mapie_v1.3.0"
+}
+
 export interface DelayResponse {
   predicted_delay_min: number;
   is_delayed: boolean;
   confidence: "high" | "medium" | "low";
+  prediction_interval?: PredictionInterval | null; // P1 Conformal Prediction (optional)
   latency_ms: number;
 }
 

@@ -37,6 +37,7 @@ PROJECT_ROOT   = Path(__file__).parent.parent
 MODELS_DIR     = PROJECT_ROOT / "data" / "models"
 XGB_MODEL_PATH = MODELS_DIR / "xgboost_best.pkl"
 IF_MODEL_PATH  = MODELS_DIR / "isolation_forest.pkl"
+CONFORMAL_PATH = MODELS_DIR / "conformal_calibrator.pkl"  # P1 · Conformal Prediction (2026-04-14)
 
 # ── Feature 정의 (analysis/ 스크립트와 동일) ──────────────────────────
 NUMERIC_FEATURES = [
@@ -150,6 +151,7 @@ class _ModelStore:
     _xgb = None
     _if  = None
     _rag = None
+    _conformal = None  # P1 · Conformal Prediction (2026-04-14)
 
     @classmethod
     def xgb(cls):
@@ -168,6 +170,23 @@ class _ModelStore:
             with open(IF_MODEL_PATH, "rb") as f:
                 cls._if = pickle.load(f)
         return cls._if
+
+    @classmethod
+    def conformal(cls):
+        """MAPIE SplitConformalRegressor calibrator.
+
+        analysis/conformal_calibration.py에서 생성. 없으면 None 반환(fallback).
+        Strategic Review 2번 병목 — uncertainty-aware inference.
+        """
+        if cls._conformal is None and CONFORMAL_PATH.exists():
+            try:
+                with open(CONFORMAL_PATH, "rb") as f:
+                    cls._conformal = pickle.load(f)
+            except Exception as e:
+                # 호환성 문제 있어도 전체 서빙은 계속
+                print(f"⚠️  Conformal calibrator 로드 실패 ({e}) → fallback to point estimate")
+                cls._conformal = None
+        return cls._conformal
 
     @classmethod
     def rag(cls):
@@ -244,11 +263,25 @@ class DelayRequest(BaseModel):
         }
 
 
+class PredictionInterval(BaseModel):
+    """Conformal Prediction interval (P1 · 2026-04-14)."""
+    lower_min:        float = Field(..., description="Lower bound of prediction (minutes)")
+    upper_min:        float = Field(..., description="Upper bound of prediction (minutes)")
+    confidence:       float = Field(..., ge=0.0, le=1.0, description="Coverage confidence (e.g. 0.9)")
+    width_min:        float = Field(..., description="upper - lower (minutes)")
+    method:           str   = Field("split_conformal_mapie_v1.3", description="Calibration method")
+
+
 class DelayResponse(BaseModel):
-    predicted_delay_min: float
-    is_delayed:          bool   # ≥15분이면 지연
-    confidence:          str    # "high" / "medium" / "low"
-    latency_ms:          float
+    predicted_delay_min:  float
+    is_delayed:           bool   # ≥15분이면 지연
+    confidence:           str    # "high" / "medium" / "low" (기존 휴리스틱, backward compat)
+    prediction_interval:  Optional[PredictionInterval] = None  # P1 · Conformal (optional, 없으면 fallback)
+    latency_ms:           float
+
+
+# `from __future__ import annotations` 로 인한 forward reference 해소
+DelayResponse.model_rebuild()
 
 
 class AnomalyRequest(BaseModel):
@@ -346,9 +379,10 @@ def predict_delay(req: DelayRequest):
     """
     XGBoost 모델로 항공편 출발 지연을 예측합니다.
 
-    - **predicted_delay_min**: 예측 지연 시간(분)
+    - **predicted_delay_min**: 예측 지연 시간(분) — point estimate
     - **is_delayed**: 15분 이상 지연 여부
-    - **confidence**: 예측 신뢰도 (절댓값 기반 휴리스틱)
+    - **confidence**: 예측 신뢰도 (절댓값 기반 휴리스틱, legacy)
+    - **prediction_interval**: Conformal Prediction 기반 90% 신뢰구간 (P1 · 2026-04-14)
     """
     t0 = time.time()
     try:
@@ -369,13 +403,44 @@ def predict_delay(req: DelayRequest):
             X_prep = model["pipeline_preprocessor"].transform(X)
             pred = float(model["model"].predict(X_prep)[0])
         else:
+            X_prep = None
             pred = float(model.predict(X)[0])
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"예측 오류: {e}")
 
+    # ── Conformal Prediction interval (P1 · 2026-04-14) ────────────────
+    interval = None
+    conformal = _ModelStore.conformal()
+    if conformal is not None and X_prep is not None:
+        try:
+            scr = conformal["scr"]
+            result = scr.predict_interval(X_prep)
+            # MAPIE 1.x returns ndarray (n, 2) or tuple (pred, interval)
+            if isinstance(result, tuple):
+                _, y_int = result
+            else:
+                y_int = result
+            # y_int: (1, 2) or (1, 2, 1)
+            if y_int.ndim == 3:
+                lower = float(y_int[0, 0, 0])
+                upper = float(y_int[0, 1, 0])
+            else:
+                lower = float(y_int[0, 0])
+                upper = float(y_int[0, 1])
+            interval = PredictionInterval(
+                lower_min=round(lower, 1),
+                upper_min=round(upper, 1),
+                confidence=float(conformal.get("confidence_level", 0.9)),
+                width_min=round(upper - lower, 1),
+                method=f"split_conformal_mapie_v{conformal.get('mapie_version', '1.3.0')}",
+            )
+        except Exception as e:
+            # conformal 실패 시에도 point estimate는 반환
+            print(f"⚠️  Conformal prediction 실패: {e}")
+
     latency = (time.time() - t0) * 1000
 
-    # 신뢰도 휴리스틱: ±5분 이내 high, ±15분 medium, 그 외 low
+    # 신뢰도 휴리스틱 (legacy): ±5분 이내 high, ±15분 medium, 그 외 low
     abs_pred = abs(pred)
     if abs_pred < 5:
         confidence = "high"
@@ -388,6 +453,7 @@ def predict_delay(req: DelayRequest):
         predicted_delay_min=round(pred, 1),
         is_delayed=pred >= 15.0,
         confidence=confidence,
+        prediction_interval=interval,
         latency_ms=round(latency, 1),
     )
 
@@ -671,9 +737,47 @@ def predict_delay_batch(requests: list[DelayRequest]):
     X = pd.DataFrame(rows)[ALL_FEATURES]
 
     try:
-        preds = model.predict(X).tolist()
+        # pipeline dict 대응 (xgboost_model.py가 저장한 형태)
+        if isinstance(model, dict):
+            X_prep = model["pipeline_preprocessor"].transform(X)
+            preds = model["model"].predict(X_prep).tolist()
+        else:
+            X_prep = None
+            preds = model.predict(X).tolist()
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"배치 예측 오류: {e}")
+
+    # ── Conformal Prediction intervals (P1 · 2026-04-14) ───────────────
+    intervals = [None] * len(preds)
+    conformal = _ModelStore.conformal()
+    if conformal is not None and X_prep is not None:
+        try:
+            scr = conformal["scr"]
+            conf_level = float(conformal.get("confidence_level", 0.9))
+            result = scr.predict_interval(X_prep)
+            if isinstance(result, tuple):
+                _, y_int = result
+            else:
+                y_int = result
+            if y_int.ndim == 3:
+                lowers = y_int[:, 0, 0]
+                uppers = y_int[:, 1, 0]
+            else:
+                lowers = y_int[:, 0]
+                uppers = y_int[:, 1]
+            intervals = [
+                {
+                    "lower_min": round(float(lo), 1),
+                    "upper_min": round(float(up), 1),
+                    "confidence": conf_level,
+                    "width_min": round(float(up - lo), 1),
+                    "method": f"split_conformal_mapie_v{conformal.get('mapie_version', '1.3.0')}",
+                }
+                for lo, up in zip(lowers, uppers)
+            ]
+        except Exception as e:
+            print(f"⚠️  배치 Conformal prediction 실패: {e}")
+            # fallback: intervals는 모두 None 유지
 
     latency = (time.time() - t0) * 1000
     return {
@@ -681,8 +785,9 @@ def predict_delay_batch(requests: list[DelayRequest]):
             {
                 "predicted_delay_min": round(p, 1),
                 "is_delayed": p >= 15.0,
+                "prediction_interval": interval,
             }
-            for p in preds
+            for p, interval in zip(preds, intervals)
         ],
         "count":      len(preds),
         "latency_ms": round(latency, 1),

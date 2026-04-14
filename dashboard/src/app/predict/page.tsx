@@ -169,9 +169,34 @@ export default function PredictPage() {
                   {result.is_delayed ? "지연 예상" : "정상 운항 예상"}
                 </div>
               </div>
+              {result.prediction_interval && (
+                <div className="bg-slate-800/60 rounded-lg p-4 border border-blue-500/30">
+                  <div className="flex items-center justify-between mb-2">
+                    <span className="text-slate-300 text-xs font-semibold uppercase tracking-wide">
+                      예측 신뢰구간 · Conformal Prediction
+                    </span>
+                    <span className="text-blue-300 text-xs font-mono">
+                      {(result.prediction_interval.confidence * 100).toFixed(0)}%
+                    </span>
+                  </div>
+                  <div className="flex items-baseline gap-2 justify-center py-1">
+                    <span className="text-slate-400 text-sm">
+                      {result.prediction_interval.lower_min.toFixed(1)}분
+                    </span>
+                    <span className="text-slate-500">~</span>
+                    <span className="text-slate-400 text-sm">
+                      {result.prediction_interval.upper_min.toFixed(1)}분
+                    </span>
+                  </div>
+                  <div className="text-center text-xs text-slate-500 mt-1">
+                    범위 {result.prediction_interval.width_min.toFixed(1)}분 ·{" "}
+                    {result.prediction_interval.method.replace("split_conformal_mapie_v", "MAPIE v")}
+                  </div>
+                </div>
+              )}
               <div className="grid grid-cols-2 gap-4 text-sm">
                 <div className="bg-slate-800 rounded-lg p-3">
-                  <span className="text-slate-400 text-xs">신뢰도</span>
+                  <span className="text-slate-400 text-xs">신뢰도 (legacy)</span>
                   <div className="font-semibold capitalize">{result.confidence}</div>
                 </div>
                 <div className="bg-slate-800 rounded-lg p-3">
