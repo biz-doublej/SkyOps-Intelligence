@@ -78,9 +78,10 @@ app.include_router(streaming.router)
 
 
 # ──────────────────────────────────────────────────────────────────────
-# 단독 실행
+# 단독 실행 / entry point (ADR-001 Phase 2 · 2026-04-14)
 # ──────────────────────────────────────────────────────────────────────
-if __name__ == "__main__":
+def main():
+    """CLI entry point — pyproject.toml의 `skyops-api`로 연결."""
     import argparse
 
     parser = argparse.ArgumentParser(description="SkyOps Intelligence FastAPI 서버")
@@ -105,3 +106,7 @@ if __name__ == "__main__":
         reload=args.reload,
         app_dir=str(_SERVING_DIR),
     )
+
+
+if __name__ == "__main__":
+    main()

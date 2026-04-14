@@ -1,0 +1,147 @@
+[build-system]
+requires = ["setuptools>=69", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "skyops-intelligence"
+version = "2.1.0"
+description = "Real-time aviation anomaly detection and AI advisory copilot"
+readme = "README.md"
+requires-python = ">=3.11"
+authors = [{name = "DoubleJ Team (정재원)"}]
+license = {text = "MIT"}
+keywords = ["aviation", "anomaly-detection", "xgboost", "rag", "conformal-prediction", "fastapi"]
+classifiers = [
+    "Development Status :: 4 - Beta",
+    "Intended Audience :: Developers",
+    "License :: OSI Approved :: MIT License",
+    "Programming Language :: Python :: 3",
+    "Programming Language :: Python :: 3.11",
+    "Topic :: Scientific/Engineering :: Artificial Intelligence",
+]
+
+# Core dependencies — FastAPI runtime. For heavier ML deps, use extras.
+dependencies = [
+    "fastapi>=0.111.0",
+    "uvicorn[standard]>=0.29.0",
+    "pydantic>=2.0.0",
+    "pandas>=2.1.0",
+    "numpy>=1.26.0",
+]
+
+[project.optional-dependencies]
+# Serving — XGBoost + Isolation Forest + MAPIE + ChromaDB
+serving = [
+    "xgboost>=2.0.0",
+    "scikit-learn>=1.4.0",
+    "mapie>=0.9.0",
+    "chromadb>=0.5.0",
+    "sentence-transformers>=3.0.0",
+    "prometheus-fastapi-instrumentator>=6.1.0",
+]
+
+# OpenTelemetry instrumentation
+otel = [
+    "opentelemetry-api>=1.27.0",
+    "opentelemetry-sdk>=1.27.0",
+    "opentelemetry-exporter-otlp>=1.27.0",
+    "opentelemetry-instrumentation-fastapi>=0.48b0",
+    "opentelemetry-instrumentation-logging>=0.48b0",
+]
+
+# Streaming pipeline — Kafka + Redis
+pipeline = [
+    "kafka-python>=2.0.2",
+    "redis>=5.0.0",
+]
+
+# ML training + MLOps
+ml = [
+    "optuna>=3.6.1",
+    "mlflow>=2.18.0",
+    "shap>=0.45.0",
+    "lightgbm>=4.3.0",
+]
+
+# LangChain RAG
+rag = [
+    "langchain>=0.2.0",
+    "langchain-openai>=0.1.0",
+    "langchain-community>=0.2.0",
+]
+
+# Evaluation
+eval = [
+    "ragas>=0.2.0",
+    "datasets>=2.14.0",
+    "rouge-score>=0.1.2",
+]
+
+# Development
+dev = [
+    "pytest>=8.0.0",
+    "httpx>=0.27.0",
+    "ruff>=0.5.0",
+]
+
+# All-in-one (CI/CD 편의)
+all = [
+    "skyops-intelligence[serving,otel,pipeline,ml,rag,eval]",
+]
+
+[project.scripts]
+skyops-api = "serving.api:main"
+skyops-train-xgb = "analysis.xgboost_model:main"
+skyops-conformal = "analysis.conformal_calibration:main"
+skyops-quantile = "analysis.quantile_regression:main"
+skyops-active-learning = "analysis.active_learning:main"
+skyops-ragas-bench = "evaluation.ragas_bench:main"
+skyops-atfm-producer = "pipeline.atfm_producer:main"
+skyops-notam-producer = "pipeline.notam_producer:main"
+
+[project.urls]
+Repository = "https://github.com/biz-doublej/SkyOps-Intelligence"
+Documentation = "https://github.com/biz-doublej/SkyOps-Intelligence/tree/dev/docs"
+
+# ── Package discovery ─────────────────────────────────────────────────
+[tool.setuptools.packages.find]
+where = ["."]
+include = ["serving*", "pipeline*", "analysis*", "evaluation*"]
+exclude = [
+    "tests*",
+    "llm_venv*",
+    "llm_data*",
+    "dashboard*",
+    "mlruns*",
+    "data*",
+    "docs*",
+    "airflow*",
+    "monitoring*",
+    "dpo*",
+    "k8s*",
+]
+
+# ── Ruff (lint) ───────────────────────────────────────────────────────
+[tool.ruff]
+line-length = 120
+target-version = "py311"
+exclude = [
+    "llm_venv",
+    "dashboard/node_modules",
+    "mlruns",
+    "data",
+]
+
+[tool.ruff.lint]
+select = ["E", "F", "W", "I", "UP"]
+ignore = [
+    "E501",  # line too long (한국어 주석 다수)
+    "E402",  # module level import not at top (sys.path 조작 필요)
+]
+
+# ── Pytest ────────────────────────────────────────────────────────────
+[tool.pytest.ini_options]
+minversion = "8.0"
+testpaths = ["tests"]
+python_files = ["test_*.py", "*_test.py"]
+addopts = "-v --tb=short"
