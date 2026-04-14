@@ -9,7 +9,7 @@ MADR(Markdown Architecture Decision Records) 템플릿을 사용합니다.
 
 | # | Title | Status | Date |
 |---|-------|--------|------|
-| [001](ADR-001-service-decomposition.md) | Service Decomposition — Split `serving/api.py` monolith into 6 microservices | **Proposed** | 2026-04-14 |
+| [001](ADR-001-service-decomposition.md) | Service Decomposition — Split `serving/api.py` monolith into 6 microservices | **Accepted** (Phase 1) | 2026-04-14 |
 
 ---
 

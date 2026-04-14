@@ -1,7 +1,7 @@
 # ADR-001: Service Decomposition — Split `serving/api.py` Monolith into 6 Microservices
 
-**Status**: Proposed
-**Date**: 2026-04-14
+**Status**: **Accepted** (Phase 1 완료 2026-04-14)
+**Date**: 2026-04-14 (Proposed) / 2026-04-14 (Phase 1 Accepted)
 **Deciders**: DoubleJ팀 (정재원), 지도교수 조상구
 **Technical Story**: [2026-04-14 Strategic Review](../../../../Obsidian Vault/SkyOps Intelligence/2026-04-14 Strategic Review.md) — 8번 병목 (Monolith Smell)
 
@@ -229,3 +229,57 @@ serving/
 | Date | Change | Author |
 |------|--------|--------|
 | 2026-04-14 | Initial draft — Proposed | Gabriel (Strategic Review) + 정재원 |
+| 2026-04-14 | **Phase 1 완료 · Status: Accepted** — FastAPI router 분리 | 정재원 + Claude (P3 Sprint) |
+
+---
+
+## Phase 1 완료 기록 (2026-04-14)
+
+### 실제 구현된 구조
+
+```
+serving/
+├── api.py                          # 107 lines (thin entry, 기존 1120 lines)
+├── common/
+│   ├── __init__.py                 # 4 lines
+│   ├── constants.py                # 68 lines — paths, FEATURES, env vars, Redis keys
+│   ├── models.py                   # 162 lines — 모든 Pydantic (10종) + model_rebuild
+│   ├── model_store.py              # 89 lines — ModelStore singleton (xgb/if/conformal/rag)
+│   ├── redis_client.py             # 50 lines — get_redis() + safe_float()
+│   ├── korean.py                   # 61 lines — clean_korean()
+│   └── telemetry.py                # 132 lines — OpenTelemetry setup
+└── routers/
+    ├── __init__.py                 # 5 lines
+    ├── gateway.py                  # 32 lines — /health
+    ├── delay.py                    # 175 lines — /predict/delay{,/batch} + Conformal
+    ├── anomaly.py                  # 146 lines — /detect/anomaly + /anomaly/feedback
+    ├── rag.py                      # 146 lines — /chat + /explain/anomaly
+    ├── notification.py             # 82 lines — /generate/announcement
+    └── streaming.py                # 157 lines — /aircraft/*, /anomaly/recent, /ws/*
+```
+
+**Total lines**: 1416 (api.py 107 + common 562 + routers 747), vs 기존 1120 라인 monolith.
+**파일당 평균**: 108 라인 (vs 이전 1120 단일).
+
+### Smoke Test 결과
+- `GET /health` → 200 (version "2.0.0")
+- `POST /predict/delay` → 200 with prediction_interval
+- `POST /detect/anomaly` → 200 with flight_phase/suppressed fields
+- `POST /anomaly/feedback` → 200 saved
+- `GET /aircraft/live`, `GET /anomaly/recent` → 200 (Redis unavailable graceful handling)
+- OpenTelemetry logs에 `trace_id` / `span_id` / `resource.service.name=skyops-api` 주입 확인
+
+### Observability 추가 (Task B 병행)
+- `common/telemetry.py` — OTel `TracerProvider` + Console exporter (기본) + OTLP gRPC (opt-in)
+- `FastAPIInstrumentor`로 모든 endpoint 자동 span 생성
+- `LoggingInstrumentor`로 trace_id 로그 주입
+- 각 router가 `get_tracer("domain")` 으로 custom span 작성 (e.g. `xgb_inference`, `rag_chain_query`)
+
+### 클라이언트 호환성
+- URL/응답 스키마 변경 없음 → dashboard, external 클라이언트 영향 없음
+- API version bumped: `1.0.0` → `2.0.0` (semver `MAJOR.MINOR.PATCH`)
+
+### 다음 단계 (Phase 2 · P4+)
+- Phase 2 · Shared infra extraction — `common/` → editable install `pip install -e common/`
+- Phase 3 · Containerization — per-service Dockerfile + `k8s/` manifests
+- 서비스 분리 후 Gateway (NGINX/Traefik) 도입 결정은 별도 ADR-002로 분리

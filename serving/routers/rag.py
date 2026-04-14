@@ -1,0 +1,146 @@
+"""RAG + LLM explanation router — /chat, /explain/anomaly.
+
+ADR-001 Migration Phase 1 (2026-04-14 P3).
+"""
+
+from __future__ import annotations
+
+import json
+import time
+import urllib.request as ur
+
+from fastapi import APIRouter, HTTPException
+
+from common.constants import LLM_MODEL_ID, VLLM_BASE_URL
+from common.korean import clean_korean
+from common.model_store import ModelStore
+from common.models import (
+    AnomalyExplainRequest,
+    ChatRequest,
+    ChatResponse,
+)
+from common.telemetry import get_tracer
+
+router = APIRouter(tags=["llm"])
+tracer = get_tracer("rag")
+
+
+@router.post("/chat", response_model=ChatResponse)
+def chat(req: ChatRequest) -> ChatResponse:
+    """AviationLLM + ChromaDB RAG 어시스턴트."""
+    t0 = time.time()
+    with tracer.start_as_current_span("chat") as span:
+        span.set_attribute("use_rag", req.use_rag)
+        span.set_attribute("question_length", len(req.question))
+
+        if req.use_rag:
+            try:
+                with tracer.start_as_current_span("rag_chain_query"):
+                    chain = ModelStore.rag()
+                    result = chain.query(req.question)
+            except Exception as e:
+                raise HTTPException(status_code=500, detail=f"RAG 응답 오류: {e}")
+
+            return ChatResponse(
+                answer=clean_korean(result["answer"]),
+                sources=result["sources"],
+                latency_ms=result["latency_ms"],
+                rag_used=True,
+            )
+
+        # 직접 vLLM 호출 (RAG 없이)
+        SYSTEM = (
+            "당신은 AviationLLM — 대한민국 항공 관제사를 돕는 AI 어시스턴트입니다. "
+            "반드시 한국어로만 답변하세요. 절대 영어, 중국어 등 다른 언어를 사용하지 마세요. "
+            "ATC 전문 용어(Squawk, Go-Around, NOTAM, FL 등)는 원어 그대로 사용하되 설명은 한국어로 하세요. "
+            "불필요한 인사말 없이 바로 본론으로 답변하세요."
+        )
+        payload = {
+            "model": LLM_MODEL_ID,
+            "messages": [
+                {"role": "system", "content": SYSTEM},
+                {"role": "user", "content": req.question},
+            ],
+            "max_tokens": req.max_tokens,
+            "temperature": 0.2,
+        }
+        data = json.dumps(payload).encode()
+        request = ur.Request(
+            f"{VLLM_BASE_URL}/chat/completions",
+            data=data,
+            headers={"Content-Type": "application/json"},
+        )
+        try:
+            with tracer.start_as_current_span("vllm_direct"):
+                with ur.urlopen(request, timeout=120) as r:
+                    resp = json.loads(r.read())
+            answer = resp["choices"][0]["message"]["content"]
+        except Exception as e:
+            raise HTTPException(status_code=502, detail=f"vLLM 호출 실패: {e}")
+
+        latency = (time.time() - t0) * 1000
+        return ChatResponse(
+            answer=clean_korean(answer),
+            sources=[],
+            latency_ms=round(latency, 1),
+            rag_used=False,
+        )
+
+
+@router.post("/explain/anomaly")
+def explain_anomaly(req: AnomalyExplainRequest):
+    """이상 탐지 이벤트를 LLM으로 자동 설명 생성."""
+    TYPE_KR = {
+        "ALTITUDE_SPIKE": "고도 급변",
+        "VELOCITY_SPIKE": "속도 이상",
+        "PATH_DEVIATION": "경로 이탈",
+    }
+    SEV_KR = {"LOW": "낮음", "MEDIUM": "중간", "HIGH": "높음", "CRITICAL": "심각"}
+
+    SYSTEM = (
+        "당신은 대한민국 항공 관제사를 돕는 전문 AI입니다.\n"
+        "규칙:\n"
+        "- 반드시 한국어로만 답변하세요. 중국어 절대 금지. 영어도 금지.\n"
+        "- 항공 약어(ICAO, AIM, FL 등)만 영문 허용. 나머지는 모두 한국어.\n"
+        "- 형식: 1) 상황 요약 2) 원인 분석 3) 권고 대응 절차\n"
+        "- 반드시 3문장 이내로 간결하게 답변을 마치세요."
+    )
+    callsign = req.callsign or req.icao24
+    user_msg = (
+        f"아래 이상 탐지 결과를 관제사에게 한국어로 설명해 주세요.\n\n"
+        f"항공편: {callsign}\n"
+        f"이상 유형: {TYPE_KR.get(req.anomaly_type, req.anomaly_type)}\n"
+        f"심각도: {SEV_KR.get(req.severity, req.severity)}\n"
+        f"상세: {json.dumps(req.details, ensure_ascii=False)}\n"
+        f"고도: {req.altitude_m}미터, 속도: {req.velocity_m_s}미터/초"
+    )
+
+    t0 = time.time()
+    with tracer.start_as_current_span("explain_anomaly") as span:
+        span.set_attribute("anomaly_type", req.anomaly_type)
+        span.set_attribute("severity", req.severity)
+
+        payload = {
+            "model": LLM_MODEL_ID,
+            "messages": [
+                {"role": "system", "content": SYSTEM},
+                {"role": "user", "content": user_msg},
+            ],
+            "max_tokens": 200,
+            "temperature": 0.2,
+        }
+        data = json.dumps(payload).encode()
+        request = ur.Request(
+            f"{VLLM_BASE_URL}/chat/completions",
+            data=data,
+            headers={"Content-Type": "application/json"},
+        )
+        try:
+            with ur.urlopen(request, timeout=120) as r:
+                resp = json.loads(r.read())
+            answer = resp["choices"][0]["message"]["content"]
+        except Exception as e:
+            raise HTTPException(status_code=502, detail=f"vLLM 호출 실패: {e}")
+
+    answer = clean_korean(answer)
+    return {"explanation": answer, "latency_ms": round((time.time() - t0) * 1000, 1)}

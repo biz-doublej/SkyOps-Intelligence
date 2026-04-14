@@ -38,6 +38,13 @@ sentence-transformers>=3.0.0
 # ── Prometheus 메트릭 ─────────────────────────────────────────────────
 prometheus-fastapi-instrumentator>=6.1.0
 
+# ── OpenTelemetry 계측 (P3 · 2026-04-14) ──────────────────────────────
+opentelemetry-api>=1.27.0
+opentelemetry-sdk>=1.27.0
+opentelemetry-exporter-otlp>=1.27.0
+opentelemetry-instrumentation-fastapi>=0.48b0
+opentelemetry-instrumentation-logging>=0.48b0
+
 # ── 기타 유틸 ─────────────────────────────────────────────────────────
 httpx>=0.27.0        # 비동기 HTTP (테스트용)
 python-dotenv>=1.0.0 # 환경 변수 관리
