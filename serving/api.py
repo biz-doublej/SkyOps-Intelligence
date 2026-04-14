@@ -22,6 +22,7 @@ from __future__ import annotations
 import os
 import pickle
 import time
+from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any, Optional
 
@@ -339,6 +340,32 @@ class AnomalyResponse(BaseModel):
     is_anomaly:   bool
     risk_level:   str             # "critical" / "warning" / "normal"
     latency_ms:   float
+    # P2 · 2026-04-14 · Phase-aware anomaly + alert discipline
+    flight_phase: Optional[str] = None            # TAXI | TAKEOFF | CRUISE | ...
+    phase_confidence: Optional[float] = None
+    suppressed: bool = False                       # debounce로 억제되었는가
+    suppress_reason: Optional[str] = None          # 억제 이유
+
+
+class AnomalyFeedbackRequest(BaseModel):
+    """P2 · 2026-04-14 · Analyst feedback stub for active learning."""
+    alert_id: str = Field(..., description="AnomalyEvent.alert_id (UUID)")
+    label: str = Field(..., description="true_positive | false_positive | uncertain")
+    note: Optional[str] = Field(None, description="자유 주석")
+    labeled_by: Optional[str] = Field("anonymous", description="labeler ID")
+
+
+class AnomalyFeedbackResponse(BaseModel):
+    saved: bool
+    alert_id: str
+    file_path: str
+
+
+# forward reference 해소 (`from __future__ import annotations` 때문에 필요)
+AnomalyRequest.model_rebuild()
+AnomalyResponse.model_rebuild()
+AnomalyFeedbackRequest.model_rebuild()
+AnomalyFeedbackResponse.model_rebuild()
 
 
 class ChatRequest(BaseModel):
@@ -477,9 +504,16 @@ def detect_anomaly(req: AnomalyRequest):
     """
     Isolation Forest 모델로 항공편 이상을 탐지합니다.
 
+    [2026-04-14 P2] Flink processor가 classify_phase() 로 계산한 phase
+    를 Redis HASH `skyops:aircraft:phase:{icao24}` 에서 조회하여 응답에 포함.
+    Debounce: severity != critical 인 동일 (icao24, type) 이벤트는
+    60초 내 재발생 시 suppressed=true 로 표시.
+
     - **anomaly_score**: IF decision_function 출력 (낮을수록 이상)
     - **is_anomaly**: IF_SCORE_THRESHOLD 기준 이상 여부
     - **risk_level**: critical (score < -0.2) / warning (-0.2 ~ -0.1) / normal
+    - **flight_phase**: Flink processor가 저장한 최근 phase (optional)
+    - **suppressed**: debounce로 브로드캐스트 억제 여부
     """
     t0 = time.time()
     try:
@@ -507,12 +541,94 @@ def detect_anomaly(req: AnomalyRequest):
     else:
         risk_level = "normal"
 
+    # P2 · flight_phase 조회 + debounce
+    flight_phase = None
+    phase_confidence = None
+    suppressed = False
+    suppress_reason = None
+
+    if req.flight_id:
+        r = _get_redis()
+        if r is not None:
+            try:
+                phase_data = r.hgetall(f"skyops:aircraft:phase:{req.flight_id}")
+                if phase_data:
+                    flight_phase = phase_data.get("phase")
+                    conf_str = phase_data.get("confidence")
+                    if conf_str:
+                        phase_confidence = float(conf_str)
+            except Exception:
+                pass
+
+            # Debounce: warning 레벨은 60초 내 재발생 시 억제
+            if is_anomaly and risk_level != "critical":
+                dkey = f"skyops:anomaly:debounce:{req.flight_id}:IF_DETECT"
+                try:
+                    if r.exists(dkey):
+                        suppressed = True
+                        suppress_reason = "debounce_60s_same_flight"
+                    else:
+                        r.setex(dkey, 60, "1")
+                except Exception:
+                    pass
+
     return AnomalyResponse(
         flight_id=req.flight_id,
         anomaly_score=round(score, 4),
         is_anomaly=is_anomaly,
         risk_level=risk_level,
         latency_ms=round(latency, 1),
+        flight_phase=flight_phase,
+        phase_confidence=phase_confidence,
+        suppressed=suppressed,
+        suppress_reason=suppress_reason,
+    )
+
+
+# ──────────────────────────────────────────────────────────────────────
+# POST /anomaly/feedback — Analyst Feedback Stub (P2 · 2026-04-14)
+# ──────────────────────────────────────────────────────────────────────
+
+_FEEDBACK_DIR = PROJECT_ROOT / "data" / "analyst_feedback"
+_FEEDBACK_FILE = _FEEDBACK_DIR / "feedback.jsonl"
+
+
+@app.post("/anomaly/feedback", response_model=AnomalyFeedbackResponse, tags=["anomaly"])
+def submit_anomaly_feedback(req: AnomalyFeedbackRequest):
+    """
+    Analyst가 alert_id에 대해 label을 제공하면 JSONL로 저장.
+
+    향후 active learning loop의 입력으로 사용될 예정.
+    Strategic Review 3번 병목 — analyst feedback loop.
+    """
+    import json as _json_mod
+    _FEEDBACK_DIR.mkdir(parents=True, exist_ok=True)
+
+    valid_labels = {"true_positive", "false_positive", "uncertain"}
+    if req.label not in valid_labels:
+        raise HTTPException(
+            status_code=400,
+            detail=f"label은 {valid_labels} 중 하나여야 합니다.",
+        )
+
+    entry = {
+        "alert_id": req.alert_id,
+        "label": req.label,
+        "note": req.note,
+        "labeled_by": req.labeled_by,
+        "labeled_at": datetime.now(timezone.utc).isoformat(),
+    }
+
+    try:
+        with open(_FEEDBACK_FILE, "a", encoding="utf-8") as f:
+            f.write(_json_mod.dumps(entry, ensure_ascii=False) + "\n")
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"피드백 저장 실패: {e}")
+
+    return AnomalyFeedbackResponse(
+        saved=True,
+        alert_id=req.alert_id,
+        file_path=str(_FEEDBACK_FILE),
     )
 
 

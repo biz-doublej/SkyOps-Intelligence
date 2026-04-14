@@ -10,10 +10,11 @@ flink_processor.py 의 ProcessFunction에서 호출됩니다.
 from __future__ import annotations
 
 import math
+import uuid
 from dataclasses import dataclass, field, asdict
 from typing import Optional
 
-# ── 상수 정의 ──────────────────────────────────────────────────────────
+# ── 상수 정의 (CRUISE 기본값) ─────────────────────────────────────────
 # 고도 급변 임계값: ±500 ft / 30초  →  m/s 단위로 변환 (1 ft = 0.3048 m)
 ALTITUDE_SPIKE_THRESHOLD_M_S = (500 * 0.3048) / 30   # ≈ 5.08 m/s
 
@@ -27,10 +28,53 @@ PATH_DEVIATION_THRESHOLD_KM = 10.0
 ANOMALY_EVENT_TTL_SEC = 3600  # 1시간 보존
 
 
+# ── Phase-aware threshold 조정 배율 (P2 · 2026-04-14) ───────────────
+# 비행 단계별로 정상 변화 폭이 달라 CRUISE 기준 threshold를 phase에 따라 조정.
+# Strategic Review 3번 병목 — rule engine + semi-supervised + analyst feedback.
+# None = 해당 phase에서는 rule 자체를 비활성 (e.g., TAXI 중 ALTITUDE_SPIKE 불가)
+PHASE_ALTITUDE_MULTIPLIER = {
+    "TAXI":     None,    # 지상 → 고도 변화 없음
+    "TAKEOFF":  3.0,     # ±1500 ft/30s 허용 (급상승 정상)
+    "CLIMB":    2.0,
+    "CRUISE":   1.0,     # 기본 ±500 ft/30s
+    "DESCENT":  2.0,
+    "APPROACH": 2.0,
+    "LANDING":  3.0,
+    "UNKNOWN":  1.0,     # 보수적으로 기본값
+}
+
+PHASE_VELOCITY_MULTIPLIER = {
+    "TAXI":     0.1,     # ±10 kt/min (taxiing 시 작은 변화가 이상)
+    "TAKEOFF":  1.5,     # ±150 kt/min (가속 정상)
+    "CLIMB":    0.8,
+    "CRUISE":   1.0,     # 기본 ±100 kt/min
+    "DESCENT":  0.8,
+    "APPROACH": 0.8,
+    "LANDING":  1.5,     # 감속 정상
+    "UNKNOWN":  1.0,
+}
+
+PHASE_PATH_MULTIPLIER = {
+    "TAXI":     None,    # 지상 경로는 CEP 대상 아님
+    "TAKEOFF":  0.5,     # ±5km (이륙 직후 경로 이탈 엄격)
+    "CLIMB":    0.7,
+    "CRUISE":   1.0,     # 기본 10km
+    "DESCENT":  0.7,
+    "APPROACH": 0.5,     # 진입 경로 엄격
+    "LANDING":  None,    # 착륙 자체는 runway 내 → rule 비활성
+    "UNKNOWN":  1.0,
+}
+
+
 # ── 데이터 클래스 ──────────────────────────────────────────────────────
 @dataclass
 class AnomalyEvent:
-    """이상 탐지 이벤트 — Redis / Kafka anomaly-event 토픽으로 전송됩니다."""
+    """이상 탐지 이벤트 — Redis / Kafka anomaly-event 토픽으로 전송됩니다.
+
+    [2026-04-14 P2] Canonical Event Model (AlertDecisionEvent)에 맞춰
+    flight_phase, alert_id, correlation_id 필드 추가. Phase-aware detection
+    을 위해 필수.
+    """
     icao24: str
     callsign: str
     anomaly_type: str               # "ALTITUDE_SPIKE" | "VELOCITY_SPIKE" | "PATH_DEVIATION"
@@ -42,6 +86,18 @@ class AnomalyEvent:
     velocity_m_s: Optional[float]
     detected_at: int                # Unix timestamp (ms)
     details: dict = field(default_factory=dict)
+
+    # P2 (2026-04-14) · Phase-aware anomaly + alert lifecycle
+    flight_phase: str = "UNKNOWN"           # FlightPhase enum value
+    phase_confidence: float = 0.0           # 0.0 ~ 1.0
+    alert_id: str = ""                      # UUID4; 생성 시 자동 할당
+    correlation_id: str = ""                # e.g. f"{icao24}:{detected_at}"
+
+    def __post_init__(self):
+        if not self.alert_id:
+            self.alert_id = str(uuid.uuid4())
+        if not self.correlation_id:
+            self.correlation_id = f"{self.icao24}:{self.detected_at}"
 
     def to_dict(self) -> dict:
         return asdict(self)
@@ -71,24 +127,36 @@ def _classify_severity(ratio: float) -> str:
     return "LOW"
 
 
-# ── CEP 룰 1: 고도 급변 ────────────────────────────────────────────────
+# ── CEP 룰 1: 고도 급변 (Phase-aware) ─────────────────────────────────
 def check_altitude_spike(
     current: dict,
     previous: Optional[dict],
     window_sec: float = 30.0,
+    flight_phase: str = "UNKNOWN",
+    phase_confidence: float = 0.0,
 ) -> Optional[AnomalyEvent]:
     """
-    고도 급변 감지 (±500 ft / 30초 초과).
+    고도 급변 감지 (phase-aware, CRUISE 기본 ±500 ft / 30초 초과).
+
+    [2026-04-14 P2] flight_phase 에 따라 threshold 조정. TAXI 중에는
+    rule 자체 비활성 (불가능한 조합).
 
     Args:
         current:  현재 flight-position 레코드
         previous: 이전 레코드 (동일 icao24)
         window_sec: 비교 시간 창 (기본 30초)
+        flight_phase: FlightPhase enum value (TAXI/TAKEOFF/.../UNKNOWN)
+        phase_confidence: classifier 신뢰도
 
     Returns:
         AnomalyEvent if anomaly detected, else None
     """
     if previous is None:
+        return None
+
+    # Phase 비활성화 (TAXI 등)
+    mult = PHASE_ALTITUDE_MULTIPLIER.get(flight_phase, 1.0)
+    if mult is None:
         return None
 
     cur_alt = current.get("baro_altitude")
@@ -106,13 +174,13 @@ def check_altitude_spike(
     alt_change_m = abs(float(cur_alt) - float(prev_alt))
     rate_m_s = alt_change_m / dt
 
-    # 30초 기준으로 정규화
-    normalized_rate = rate_m_s * (window_sec / dt) if dt != window_sec else rate_m_s
+    # Phase-aware threshold
+    effective_threshold = ALTITUDE_SPIKE_THRESHOLD_M_S * mult
 
-    if rate_m_s < ALTITUDE_SPIKE_THRESHOLD_M_S:
+    if rate_m_s < effective_threshold:
         return None
 
-    ratio = rate_m_s / ALTITUDE_SPIKE_THRESHOLD_M_S
+    ratio = rate_m_s / effective_threshold
     direction = "▲상승" if float(cur_alt) > float(prev_alt) else "▼하강"
 
     return AnomalyEvent(
@@ -121,9 +189,9 @@ def check_altitude_spike(
         anomaly_type="ALTITUDE_SPIKE",
         severity=_classify_severity(ratio),
         description=(
-            f"고도 급변 감지 {direction}: "
+            f"고도 급변 감지 {direction} [{flight_phase}]: "
             f"{alt_change_m:.0f}m 변화 / {dt:.0f}초 "
-            f"(기준: {500 * 0.3048:.0f}m/30초)"
+            f"(기준: {effective_threshold*30:.0f}m/30초, phase mult={mult})"
         ),
         latitude=current.get("latitude"),
         longitude=current.get("longitude"),
@@ -135,9 +203,12 @@ def check_altitude_spike(
             "cur_altitude_m": float(cur_alt),
             "delta_m": round(alt_change_m, 2),
             "rate_m_s": round(rate_m_s, 3),
-            "threshold_m_s": round(ALTITUDE_SPIKE_THRESHOLD_M_S, 3),
+            "threshold_m_s": round(effective_threshold, 3),
+            "phase_multiplier": mult,
             "elapsed_sec": round(dt, 1),
         },
+        flight_phase=flight_phase,
+        phase_confidence=phase_confidence,
     )
 
 
@@ -146,19 +217,29 @@ def check_velocity_spike(
     current: dict,
     previous: Optional[dict],
     window_sec: float = 60.0,
+    flight_phase: str = "UNKNOWN",
+    phase_confidence: float = 0.0,
 ) -> Optional[AnomalyEvent]:
     """
-    속도 이상 감지 (±100 knot / 1분 초과).
+    속도 이상 감지 (phase-aware, CRUISE 기본 ±100 knot / 1분 초과).
+
+    [2026-04-14 P2] flight_phase 에 따라 threshold 조정.
 
     Args:
         current:  현재 flight-position 레코드
         previous: 이전 레코드 (동일 icao24)
         window_sec: 비교 시간 창 (기본 60초)
+        flight_phase: FlightPhase enum value
+        phase_confidence: classifier 신뢰도
 
     Returns:
         AnomalyEvent if anomaly detected, else None
     """
     if previous is None:
+        return None
+
+    mult = PHASE_VELOCITY_MULTIPLIER.get(flight_phase, 1.0)
+    if mult is None:
         return None
 
     cur_vel = current.get("velocity")
@@ -177,13 +258,13 @@ def check_velocity_spike(
     # 분당 변화율로 정규화
     rate_per_min = vel_change_m_s * (60.0 / dt)
 
-    if rate_per_min < VELOCITY_SPIKE_THRESHOLD_M_S_PER_MIN:
+    effective_threshold = VELOCITY_SPIKE_THRESHOLD_M_S_PER_MIN * mult
+
+    if rate_per_min < effective_threshold:
         return None
 
-    ratio = rate_per_min / VELOCITY_SPIKE_THRESHOLD_M_S_PER_MIN
-    # m/s → knot 환산 (표시용)
+    ratio = rate_per_min / effective_threshold
     vel_change_knots = vel_change_m_s / 0.514444
-    cur_vel_knots = float(cur_vel) / 0.514444
 
     return AnomalyEvent(
         icao24=current.get("icao24", ""),
@@ -191,8 +272,8 @@ def check_velocity_spike(
         anomaly_type="VELOCITY_SPIKE",
         severity=_classify_severity(ratio),
         description=(
-            f"속도 이상 감지: {vel_change_knots:.1f}kt 변화 / {dt:.0f}초 "
-            f"(분당 {rate_per_min / 0.514444:.1f}kt, 기준: 100kt/min)"
+            f"속도 이상 감지 [{flight_phase}]: {vel_change_knots:.1f}kt 변화 / {dt:.0f}초 "
+            f"(분당 {rate_per_min / 0.514444:.1f}kt, 기준: {100*mult:.0f}kt/min)"
         ),
         latitude=current.get("latitude"),
         longitude=current.get("longitude"),
@@ -204,33 +285,34 @@ def check_velocity_spike(
             "cur_velocity_m_s": round(float(cur_vel), 2),
             "delta_m_s": round(vel_change_m_s, 3),
             "rate_per_min_m_s": round(rate_per_min, 3),
-            "threshold_per_min_m_s": round(VELOCITY_SPIKE_THRESHOLD_M_S_PER_MIN, 3),
+            "threshold_per_min_m_s": round(effective_threshold, 3),
+            "phase_multiplier": mult,
             "elapsed_sec": round(dt, 1),
         },
+        flight_phase=flight_phase,
+        phase_confidence=phase_confidence,
     )
 
 
-# ── CEP 룰 3: 경로 이탈 ────────────────────────────────────────────────
+# ── CEP 룰 3: 경로 이탈 (Phase-aware) ──────────────────────────────────
 def check_path_deviation(
     current: dict,
     history: list[dict],
     lookahead_points: int = 3,
+    flight_phase: str = "UNKNOWN",
+    phase_confidence: float = 0.0,
 ) -> Optional[AnomalyEvent]:
     """
-    경로 이탈 감지 (예상 선형 경로에서 10km 이상 벗어남).
+    경로 이탈 감지 (phase-aware, CRUISE 기본 10km 초과).
 
-    최근 N개의 위치 기록으로 선형 보간 경로를 추정하고,
-    현재 위치와의 수직 거리(cross-track distance)가 임계값을 넘으면 이상으로 판단합니다.
-
-    Args:
-        current:         현재 레코드
-        history:         최근 레코드 리스트 (오래된 것부터, 최소 2개 필요)
-        lookahead_points: 경로 추정에 사용할 이전 포인트 수
-
-    Returns:
-        AnomalyEvent if anomaly detected, else None
+    [2026-04-14 P2] flight_phase 에 따라 threshold 조정. TAXI/LANDING은
+    rule 비활성 (runway 내 이동).
     """
     if len(history) < 2:
+        return None
+
+    mult = PHASE_PATH_MULTIPLIER.get(flight_phase, 1.0)
+    if mult is None:
         return None
 
     cur_lat = current.get("latitude")
@@ -240,7 +322,6 @@ def check_path_deviation(
     if None in (cur_lat, cur_lon):
         return None
 
-    # 유효 포인트만 추출
     valid = [
         p for p in history[-lookahead_points:]
         if p.get("latitude") is not None and p.get("longitude") is not None
@@ -255,13 +336,13 @@ def check_path_deviation(
     lat2, lon2 = float(p2["latitude"]), float(p2["longitude"])
     lat3, lon3 = float(cur_lat), float(cur_lon)
 
-    # 선분 p1→p2 에 대한 점 p3의 수직 거리 계산
     deviation_km = _cross_track_distance_km(lat1, lon1, lat2, lon2, lat3, lon3)
+    effective_threshold = PATH_DEVIATION_THRESHOLD_KM * mult
 
-    if deviation_km < PATH_DEVIATION_THRESHOLD_KM:
+    if deviation_km < effective_threshold:
         return None
 
-    ratio = deviation_km / PATH_DEVIATION_THRESHOLD_KM
+    ratio = deviation_km / effective_threshold
 
     return AnomalyEvent(
         icao24=current.get("icao24", ""),
@@ -269,8 +350,8 @@ def check_path_deviation(
         anomaly_type="PATH_DEVIATION",
         severity=_classify_severity(ratio),
         description=(
-            f"경로 이탈 감지: 예상 경로에서 {deviation_km:.1f}km 벗어남 "
-            f"(기준: {PATH_DEVIATION_THRESHOLD_KM}km)"
+            f"경로 이탈 감지 [{flight_phase}]: 예상 경로에서 {deviation_km:.1f}km 벗어남 "
+            f"(기준: {effective_threshold:.1f}km, phase mult={mult})"
         ),
         latitude=cur_lat,
         longitude=cur_lon,
@@ -279,11 +360,14 @@ def check_path_deviation(
         detected_at=int(float(cur_ts) * 1000) if cur_ts else 0,
         details={
             "deviation_km": round(deviation_km, 3),
-            "threshold_km": PATH_DEVIATION_THRESHOLD_KM,
+            "threshold_km": round(effective_threshold, 3),
+            "phase_multiplier": mult,
             "ref_point_1": {"lat": lat1, "lon": lon1},
             "ref_point_2": {"lat": lat2, "lon": lon2},
             "cur_point": {"lat": lat3, "lon": lon3},
         },
+        flight_phase=flight_phase,
+        phase_confidence=phase_confidence,
     )
 
 
@@ -319,29 +403,42 @@ def evaluate_all_rules(
     current: dict,
     previous: Optional[dict],
     history: list[dict],
+    flight_phase: str = "UNKNOWN",
+    phase_confidence: float = 0.0,
 ) -> list[AnomalyEvent]:
     """
     모든 CEP 룰을 평가하고 탐지된 이상 이벤트 목록을 반환합니다.
+
+    [2026-04-14 P2] flight_phase 를 전달받아 phase-aware threshold 적용.
+    호출자(flink_processor)가 phase_classifier로 먼저 분류한 뒤 전달.
 
     Args:
         current:  현재 flight-position 레코드
         previous: 직전 레코드 (동일 icao24)
         history:  최근 N개 레코드 리스트
+        flight_phase: FlightPhase enum value (TAXI / TAKEOFF / ... / UNKNOWN)
+        phase_confidence: classifier 신뢰도 (0.0 ~ 1.0)
 
     Returns:
         감지된 AnomalyEvent 목록 (없으면 빈 리스트)
     """
     events: list[AnomalyEvent] = []
 
-    alt_event = check_altitude_spike(current, previous)
+    alt_event = check_altitude_spike(current, previous,
+                                     flight_phase=flight_phase,
+                                     phase_confidence=phase_confidence)
     if alt_event:
         events.append(alt_event)
 
-    vel_event = check_velocity_spike(current, previous)
+    vel_event = check_velocity_spike(current, previous,
+                                     flight_phase=flight_phase,
+                                     phase_confidence=phase_confidence)
     if vel_event:
         events.append(vel_event)
 
-    path_event = check_path_deviation(current, history)
+    path_event = check_path_deviation(current, history,
+                                      flight_phase=flight_phase,
+                                      phase_confidence=phase_confidence)
     if path_event:
         events.append(path_event)
 
@@ -412,8 +509,30 @@ if __name__ == "__main__":
     else:
         print("  ⬜ 이상 없음")
 
-    print("\n[TEST 4] 통합 평가 (모든 룰):")
-    all_events = evaluate_all_rules(cur_vel, prev_vel, history)
+    print("\n[TEST 4] 통합 평가 (모든 룰, phase=CRUISE):")
+    all_events = evaluate_all_rules(cur_vel, prev_vel, history, flight_phase="CRUISE", phase_confidence=0.9)
     print(f"  탐지된 이상 이벤트: {len(all_events)}건")
     for e in all_events:
-        print(f"    - {e.anomaly_type} [{e.severity}]: {e.description}")
+        print(f"    - {e.anomaly_type} [{e.severity}] phase={e.flight_phase}: {e.description}")
+
+    # [TEST 5] Phase-aware suppression: CRUISE에서는 탐지되는 altitude_spike가 TAKEOFF에서는 통과
+    print("\n[TEST 5] Phase-aware threshold (동일 이벤트, phase 차이):")
+    evt_cruise = check_altitude_spike(cur_record, prev_record, flight_phase="CRUISE")
+    evt_takeoff = check_altitude_spike(cur_record, prev_record, flight_phase="TAKEOFF")
+    evt_taxi = check_altitude_spike(cur_record, prev_record, flight_phase="TAXI")
+    print(f"  CRUISE  → {'탐지' if evt_cruise else '정상'}")
+    print(f"  TAKEOFF → {'탐지' if evt_takeoff else '정상'}  (mult=3.0, 관대)")
+    print(f"  TAXI    → {'탐지' if evt_taxi else '정상'}  (rule 비활성)")
+    assert evt_cruise is not None, "CRUISE는 탐지되어야 함"
+    assert evt_taxi is None, "TAXI에서는 rule 비활성 (None 반환)"
+    print("  ✅ phase-aware threshold 정상 동작")
+
+    # [TEST 6] AnomalyEvent.alert_id / correlation_id 자동 생성
+    print("\n[TEST 6] AnomalyEvent metadata:")
+    if evt_cruise:
+        print(f"  alert_id:       {evt_cruise.alert_id}")
+        print(f"  correlation_id: {evt_cruise.correlation_id}")
+        print(f"  flight_phase:   {evt_cruise.flight_phase}")
+        assert len(evt_cruise.alert_id) == 36, "UUID4 형식이어야 함"
+        assert evt_cruise.correlation_id.startswith(evt_cruise.icao24), "correlation_id 포맷"
+        print("  ✅ alert_id/correlation_id 자동 할당 확인")

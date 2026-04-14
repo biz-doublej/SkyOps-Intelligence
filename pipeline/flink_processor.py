@@ -64,11 +64,14 @@ HISTORY_MAX_LEN   = 20       # icao24당 최대 이력 보관 수
 # Redis 키 네임스페이스
 REDIS_KEY_AIRCRAFT_LATEST  = "skyops:aircraft:latest"    # ZSET — score=timestamp
 REDIS_KEY_AIRCRAFT_STATE   = "skyops:aircraft:state:{}"  # HASH — 항공기별 최신 상태
+REDIS_KEY_AIRCRAFT_PHASE   = "skyops:aircraft:phase:{}"  # HASH — P2 flight phase (2026-04-14)
 REDIS_KEY_WINDOW_AGG       = "skyops:window:agg:{}"      # HASH — 윈도우 집계 결과
 REDIS_KEY_ANOMALY_STREAM   = "skyops:anomaly:stream"     # LIST — 최근 이상 이벤트
 REDIS_KEY_ANOMALY_COUNT    = "skyops:anomaly:count"      # HASH — 유형별 카운트
+REDIS_KEY_ANOMALY_DEBOUNCE = "skyops:anomaly:debounce:{}:{}"  # STR TTL — P2 debounce (2026-04-14)
 REDIS_AIRCRAFT_TTL_SEC     = 600    # 10분 미수신 시 만료
 REDIS_ANOMALY_STREAM_MAX   = 1000   # 이상 이벤트 최대 보관 수
+ANOMALY_DEBOUNCE_SEC       = 60     # P2 동일 (icao24, type) 60초 suppression
 
 # ── Redis 초기화 ────────────────────────────────────────────────────────
 try:
@@ -101,13 +104,15 @@ except ImportError:
     logger.error("❌ kafka-python 패키지 미설치. pip install kafka-python 실행 후 재시도하세요.")
     sys.exit(1)
 
-# ── CEP 룰 임포트 ─────────────────────────────────────────────────────
+# ── CEP 룰 + Phase Classifier 임포트 ─────────────────────────────────
 try:
     from cep_rules import evaluate_all_rules, AnomalyEvent
+    from phase_classifier import classify_phase, FlightPhase
 except ImportError:
     # pipeline/ 디렉토리 직접 실행 시
     sys.path.insert(0, os.path.dirname(__file__))
     from cep_rules import evaluate_all_rules, AnomalyEvent
+    from phase_classifier import classify_phase, FlightPhase
 
 
 # ── 인메모리 상태 저장소 ───────────────────────────────────────────────
@@ -393,16 +398,50 @@ def run_processor() -> None:
                 store.add(record)
                 stats.record_message()
 
-                # 2. 이전 레코드 조회 및 CEP 평가
+                # 2. 이전 레코드 조회 및 Phase 분류 (P2 · 2026-04-14)
                 previous = store.get_previous(icao24)
                 history = store.get_history(icao24)
 
-                anomaly_events = evaluate_all_rules(record, previous, history)
+                phase, phase_conf = classify_phase(record, previous=previous)
+                record["_flight_phase"] = phase.value
+                record["_phase_confidence"] = phase_conf
+
+                # Redis에 phase 상태 저장 (TTL 10분)
+                try:
+                    phase_key = REDIS_KEY_AIRCRAFT_PHASE.format(icao24)
+                    r.hset(phase_key, mapping={
+                        "phase": phase.value,
+                        "confidence": round(phase_conf, 4),
+                        "updated_at": int(time.time()),
+                    })
+                    r.expire(phase_key, REDIS_AIRCRAFT_TTL_SEC)
+                except Exception as e:
+                    logger.debug(f"phase Redis 기록 실패: {e}")
+
+                # 3. CEP 평가 (phase-aware)
+                anomaly_events = evaluate_all_rules(
+                    record, previous, history,
+                    flight_phase=phase.value, phase_confidence=phase_conf,
+                )
                 for event in anomaly_events:
+                    # Debounce: 동일 (icao24, type) 60초 내 재발생 시 HIGH 아니면 suppress
+                    dkey = REDIS_KEY_ANOMALY_DEBOUNCE.format(icao24, event.anomaly_type)
+                    try:
+                        if event.severity != "HIGH" and r.exists(dkey):
+                            logger.debug(
+                                f"⏳ Debounce: {event.anomaly_type} {icao24} 억제 "
+                                f"(severity={event.severity})"
+                            )
+                            continue
+                        r.setex(dkey, ANOMALY_DEBOUNCE_SEC, "1")
+                    except Exception as e:
+                        logger.debug(f"debounce 체크 실패: {e}")
+
                     save_anomaly_to_redis(event)
                     stats.record_anomaly()
                     logger.warning(
-                        f"🚨 이상 탐지 [{event.severity}] {event.anomaly_type} | "
+                        f"🚨 이상 탐지 [{event.severity}] {event.anomaly_type} "
+                        f"phase={event.flight_phase}({event.phase_confidence:.2f}) | "
                         f"{event.callsign} ({icao24}) — {event.description}"
                     )
 
