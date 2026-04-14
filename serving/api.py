@@ -50,6 +50,10 @@ NUMERIC_FEATURES = [
     "origin_weather_hist_delay", "dest_weather_hist_delay",
     "carrier_hist_delay", "origin_hist_delay",
     "dest_hist_delay", "route_hist_delay",
+    # Rotation features (P1 · 2026-04-14)
+    "rotation_depth", "prev_leg_arr_delay_min",
+    "scheduled_turnaround_min", "actual_turnaround_min",
+    "is_first_leg_of_day",
 ]
 CATEGORICAL_FEATURES = ["carrier_code", "origin", "dest"]
 ALL_FEATURES = NUMERIC_FEATURES + CATEGORICAL_FEATURES
@@ -239,6 +243,12 @@ class DelayRequest(BaseModel):
     origin_hist_delay:          float = Field(0.0)
     dest_hist_delay:            float = Field(0.0)
     route_hist_delay:           float = Field(0.0)
+    # Rotation features (P1 · 2026-04-14) — 모두 default로 optional
+    rotation_depth:             int   = Field(0,    ge=0, description="해당 일자 내 몇 번째 leg (0=첫째)")
+    prev_leg_arr_delay_min:     float = Field(0.0,  description="같은 tail의 직전 leg 실도착 지연")
+    scheduled_turnaround_min:   float = Field(60.0, description="예정 turnaround (분)")
+    actual_turnaround_min:      float = Field(60.0, description="실제 turnaround (분)")
+    is_first_leg_of_day:        int   = Field(1,    ge=0, le=1, description="당일 첫 leg 여부")
     # 범주형
     carrier_code: str = Field("OO",  description="항공사 코드")
     origin:       str = Field("ATL", description="출발 공항 IATA")

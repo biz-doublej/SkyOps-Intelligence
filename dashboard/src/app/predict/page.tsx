@@ -26,6 +26,12 @@ const defaultForm: DelayRequest = {
   origin_hist_delay: 6.3,
   dest_hist_delay: 5.8,
   route_hist_delay: 7.2,
+  // Rotation features (P1 · 2026-04-14) — defaults for "first leg of day, 1hr turnaround"
+  rotation_depth: 0,
+  prev_leg_arr_delay_min: 0,
+  scheduled_turnaround_min: 60,
+  actual_turnaround_min: 60,
+  is_first_leg_of_day: 1,
   carrier_code: "KE",
   origin: "ICN",
   dest: "CJU",
@@ -132,6 +138,65 @@ export default function PredictPage() {
                 />
               </label>
             </div>
+
+            <details className="mt-2 bg-slate-800/40 rounded-lg border border-slate-700/50">
+              <summary className="cursor-pointer px-3 py-2 text-xs text-slate-300 font-semibold tracking-wide uppercase hover:text-slate-100">
+                고급 · Rotation Features (P1 · 2026-04-14)
+              </summary>
+              <div className="px-3 pb-3 pt-1 space-y-3">
+                <div className="grid grid-cols-2 gap-3">
+                  <label className="space-y-1">
+                    <span className="text-xs text-slate-400">당일 leg 순서 (0=첫째)</span>
+                    <input
+                      type="number"
+                      min={0}
+                      value={form.rotation_depth ?? 0}
+                      onChange={(e) => update("rotation_depth", +e.target.value)}
+                      className="w-full bg-slate-800 border border-slate-600 rounded-lg px-3 py-2 text-sm"
+                    />
+                  </label>
+                  <label className="space-y-1">
+                    <span className="text-xs text-slate-400">직전 leg 도착 지연 (분)</span>
+                    <input
+                      type="number"
+                      value={form.prev_leg_arr_delay_min ?? 0}
+                      onChange={(e) =>
+                        update("prev_leg_arr_delay_min", +e.target.value)
+                      }
+                      className="w-full bg-slate-800 border border-slate-600 rounded-lg px-3 py-2 text-sm"
+                    />
+                  </label>
+                </div>
+                <div className="grid grid-cols-2 gap-3">
+                  <label className="space-y-1">
+                    <span className="text-xs text-slate-400">예정 turnaround (분)</span>
+                    <input
+                      type="number"
+                      value={form.scheduled_turnaround_min ?? 60}
+                      onChange={(e) =>
+                        update("scheduled_turnaround_min", +e.target.value)
+                      }
+                      className="w-full bg-slate-800 border border-slate-600 rounded-lg px-3 py-2 text-sm"
+                    />
+                  </label>
+                  <label className="space-y-1">
+                    <span className="text-xs text-slate-400">실제 turnaround (분)</span>
+                    <input
+                      type="number"
+                      value={form.actual_turnaround_min ?? 60}
+                      onChange={(e) =>
+                        update("actual_turnaround_min", +e.target.value)
+                      }
+                      className="w-full bg-slate-800 border border-slate-600 rounded-lg px-3 py-2 text-sm"
+                    />
+                  </label>
+                </div>
+                <p className="text-[11px] text-slate-500 leading-relaxed">
+                  같은 기체 (tail_number) 의 연속 leg 정보. 모두 optional, 기본값은
+                  &ldquo;당일 첫 leg · 1시간 turnaround&rdquo; 시나리오.
+                </p>
+              </div>
+            </details>
 
             <button
               onClick={submit}

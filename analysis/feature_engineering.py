@@ -31,6 +31,7 @@ PROCESSED_DIR.mkdir(parents=True, exist_ok=True)
 RENAME_MAP = {
     "YEAR": "year", "MONTH": "month", "DAY": "day",
     "AIRLINE": "carrier_code", "FLIGHT_NUMBER": "flight_num",
+    "TAIL_NUMBER": "tail_number",        # P1 Rotation PoC — 2026-04-14
     "ORIGIN_AIRPORT": "origin", "DESTINATION_AIRPORT": "dest",
     "SCHEDULED_DEPARTURE": "sched_dep_time", "DEPARTURE_TIME": "act_dep_time",
     "DEPARTURE_DELAY": "dep_delay_min", "TAXI_OUT": "taxi_out_min",
@@ -125,12 +126,12 @@ FEATURE_SPEC = {
 
     # ── 이전 편 지연 (Cascade Delay) 관련 (3개) ─────────────────────
     "prev_dep_delay_min": {
-        "desc": "동일 기체 직전 편 출발 지연 (cascade delay)",
+        "desc": "동일 flight_num 직전 편 출발 지연 (cascade delay)",
         "type": "float", "unit": "분",
         "source": "shift(1) within (carrier_code, flight_num, fl_date)",
     },
     "prev_arr_delay_min": {
-        "desc": "동일 기체 직전 편 도착 지연",
+        "desc": "동일 flight_num 직전 편 도착 지연",
         "type": "float", "unit": "분",
         "source": "shift(1) within (carrier_code, flight_num, fl_date)",
     },
@@ -138,6 +139,38 @@ FEATURE_SPEC = {
         "desc": "직전 편 지연 여부 (>15분 = 1)",
         "type": "int", "unit": "bool",
         "source": "prev_dep_delay_min > 15",
+    },
+
+    # ── Rotation (P1 · 2026-04-14, tail_number 기반) (5개) ────────────
+    "rotation_depth": {
+        "desc": "해당 일자 내 몇 번째 leg (0=첫째, 1=둘째, ...) — 동일 tail 기준",
+        "type": "int", "unit": "-",
+        "source": "groupby(tail_number, fl_date).cumcount()",
+        "note": "P1 Rotation PoC",
+    },
+    "prev_leg_arr_delay_min": {
+        "desc": "같은 tail_number의 직전 leg 실제 도착 지연 (flight_num 무관)",
+        "type": "float", "unit": "분",
+        "source": "groupby(tail_number)[arr_delay_min].shift(1)",
+        "note": "P1 Rotation PoC",
+    },
+    "scheduled_turnaround_min": {
+        "desc": "예정 turnaround: sched_dep - prev_sched_arr (tail 기준)",
+        "type": "float", "unit": "분",
+        "source": "shift(1) of sched_arr_dt per tail_number",
+        "note": "P1 Rotation PoC",
+    },
+    "actual_turnaround_min": {
+        "desc": "실제 turnaround: sched_dep - prev_actual_arr (tail 기준)",
+        "type": "float", "unit": "분",
+        "source": "shift(1) of act_arr_dt per tail_number",
+        "note": "P1 Rotation PoC",
+    },
+    "is_first_leg_of_day": {
+        "desc": "해당 일자 첫 leg 여부 (rotation_depth == 0)",
+        "type": "int", "unit": "bool",
+        "source": "rotation_depth == 0",
+        "note": "P1 Rotation PoC",
     },
 
     # ── 공항 혼잡도 관련 (2개) ───────────────────────────────────────
@@ -250,6 +283,7 @@ def build_features(sample_n: int | None = None) -> pd.DataFrame:
         ("시간 Feature 생성",           _add_time_features),
         ("노선 Feature 생성",           _add_route_features),
         ("Cascade Delay Feature",       _add_cascade_features),
+        ("Rotation Feature (P1)",       _add_rotation_features),
         ("공항 혼잡도 Feature",         _add_congestion_features),
         ("기상 이력 Feature",           _add_weather_features),
         ("통계적 인코딩 (Target Enc.)", _add_target_encoding),
@@ -288,6 +322,79 @@ def _add_cascade_features(df: pd.DataFrame) -> pd.DataFrame:
     df["prev_dep_delay_min"] = grp["dep_delay_min"].shift(1)
     df["prev_arr_delay_min"] = grp["arr_delay_min"].shift(1)
     df["is_prev_delayed"]    = (df["prev_dep_delay_min"] > 15).astype("Int8")
+    return df
+
+
+def _add_rotation_features(df: pd.DataFrame) -> pd.DataFrame:
+    """TAIL_NUMBER 기반 rotation-aware features (P1 · 2026-04-14).
+
+    Strategic Review 4번 병목 — EUROCONTROL CODA가 지적하는 reactionary/rotational
+    delay를 반영. 기존 cascade features는 flight_num 기준이라 같은 기체가 다른
+    flight_num으로 운항할 때 연결이 끊긴다. 여기서는 tail_number 기준으로
+    운항 네트워크를 모델링한다.
+
+    생성 features:
+      - rotation_depth: 해당 일자 내 몇 번째 leg (0=첫째)
+      - prev_leg_arr_delay_min: 같은 tail의 직전 leg 실제 도착 지연
+      - scheduled_turnaround_min: sched_dep - prev_sched_arr (minutes)
+      - actual_turnaround_min: sched_dep - prev_act_arr (minutes, nullable)
+      - is_first_leg_of_day: rotation_depth == 0
+    """
+    # tail_number 결측은 "UNKNOWN"으로 마킹하여 groupby에는 포함하되,
+    # 해당 그룹 내에서는 rotation 의미가 없음을 is_first_leg_of_day로 식별 가능
+    df["tail_number"] = df["tail_number"].fillna("UNKNOWN").astype(str)
+
+    # fl_date + sched_dep_time → 고해상도 datetime (HHMM → minutes)
+    dep_hm = pd.to_numeric(df["sched_dep_time"], errors="coerce").fillna(0).astype(int)
+    dep_minutes = (dep_hm // 100).clip(0, 23) * 60 + (dep_hm % 100).clip(0, 59)
+    df["_sched_dep_dt"] = df["fl_date"] + pd.to_timedelta(dep_minutes, unit="m")
+
+    arr_hm = pd.to_numeric(df["sched_arr_time"], errors="coerce").fillna(0).astype(int)
+    arr_minutes = (arr_hm // 100).clip(0, 23) * 60 + (arr_hm % 100).clip(0, 59)
+    df["_sched_arr_dt"] = df["fl_date"] + pd.to_timedelta(arr_minutes, unit="m")
+    # arr < dep이면 익일 도착 (e.g. 저녁 출발 → 익일 새벽 도착) — 1일 더함
+    df.loc[df["_sched_arr_dt"] < df["_sched_dep_dt"], "_sched_arr_dt"] += pd.Timedelta(days=1)
+
+    act_hm = pd.to_numeric(df["act_arr_time"], errors="coerce")
+    has_act = act_hm.notna()
+    act_hm_filled = act_hm.fillna(0).astype(int)
+    act_minutes = (act_hm_filled // 100).clip(0, 23) * 60 + (act_hm_filled % 100).clip(0, 59)
+    df["_act_arr_dt"] = df["fl_date"] + pd.to_timedelta(act_minutes, unit="m")
+    df.loc[df["_act_arr_dt"] < df["_sched_dep_dt"], "_act_arr_dt"] += pd.Timedelta(days=1)
+    df.loc[~has_act, "_act_arr_dt"] = pd.NaT
+
+    # tail별 시간 순 정렬
+    df.sort_values(["tail_number", "_sched_dep_dt"], inplace=True)
+    df.reset_index(drop=True, inplace=True)
+
+    grp_tail = df.groupby("tail_number")
+
+    # 1. rotation_depth: 해당 일자 내 몇 번째 leg
+    df["rotation_depth"] = (
+        df.groupby(["tail_number", "fl_date"]).cumcount().astype("Int16")
+    )
+
+    # 2. 직전 leg 도착 지연 (tail 기준)
+    df["prev_leg_arr_delay_min"] = grp_tail["arr_delay_min"].shift(1)
+
+    # 3. scheduled_turnaround_min: sched_dep - prev_sched_arr
+    prev_sched_arr = grp_tail["_sched_arr_dt"].shift(1)
+    df["scheduled_turnaround_min"] = (
+        (df["_sched_dep_dt"] - prev_sched_arr).dt.total_seconds() / 60
+    )
+
+    # 4. actual_turnaround_min: sched_dep - prev_actual_arr
+    prev_act_arr = grp_tail["_act_arr_dt"].shift(1)
+    df["actual_turnaround_min"] = (
+        (df["_sched_dep_dt"] - prev_act_arr).dt.total_seconds() / 60
+    )
+
+    # 5. is_first_leg_of_day
+    df["is_first_leg_of_day"] = (df["rotation_depth"] == 0).astype("Int8")
+
+    # 임시 컬럼 제거
+    df.drop(columns=["_sched_dep_dt", "_sched_arr_dt", "_act_arr_dt"], inplace=True)
+
     return df
 
 
@@ -348,6 +455,12 @@ def _handle_missing(df: pd.DataFrame) -> pd.DataFrame:
     df["prev_dep_delay_min"] = df["prev_dep_delay_min"].fillna(0)
     df["prev_arr_delay_min"] = df["prev_arr_delay_min"].fillna(0)
     df["is_prev_delayed"] = df["is_prev_delayed"].fillna(0)
+
+    # P1 Rotation features — 첫 leg은 이전 값 없음 → 0으로 대체.
+    # is_first_leg_of_day 플래그로 "첫 leg"와 "N번째 leg의 우연한 0" 구분 가능.
+    df["prev_leg_arr_delay_min"] = df["prev_leg_arr_delay_min"].fillna(0)
+    df["scheduled_turnaround_min"] = df["scheduled_turnaround_min"].fillna(0)
+    df["actual_turnaround_min"] = df["actual_turnaround_min"].fillna(0)
 
     numeric_fill_cols = [
         "origin_weather_hist_delay", "dest_weather_hist_delay",

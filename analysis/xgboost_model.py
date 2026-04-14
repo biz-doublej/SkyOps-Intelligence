@@ -70,6 +70,10 @@ NUMERIC_FEATURES = [
     "origin_weather_hist_delay", "dest_weather_hist_delay",
     "carrier_hist_delay", "origin_hist_delay",
     "dest_hist_delay", "route_hist_delay",
+    # Rotation features (P1 · 2026-04-14)
+    "rotation_depth", "prev_leg_arr_delay_min",
+    "scheduled_turnaround_min", "actual_turnaround_min",
+    "is_first_leg_of_day",
 ]
 CATEGORICAL_FEATURES = ["carrier_code", "origin", "dest"]
 TARGET = "dep_delay_min"

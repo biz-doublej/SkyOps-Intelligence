@@ -48,6 +48,12 @@ export interface DelayRequest {
   origin_hist_delay: number;
   dest_hist_delay: number;
   route_hist_delay: number;
+  // Rotation features (P1 · 2026-04-14) — all optional with defaults on backend
+  rotation_depth?: number;            // 0 = first leg of day
+  prev_leg_arr_delay_min?: number;    // minutes
+  scheduled_turnaround_min?: number;  // minutes
+  actual_turnaround_min?: number;     // minutes
+  is_first_leg_of_day?: number;       // 0 or 1
   carrier_code: string;
   origin: string;
   dest: string;

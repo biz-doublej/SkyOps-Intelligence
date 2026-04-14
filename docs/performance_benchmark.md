@@ -1,7 +1,9 @@
 # SkyOps Intelligence — 시스템 전체 성능 벤치마크
 
-> **2026-04-14 업데이트**: `KFold(shuffle=True)` → `TimeSeriesSplit` 전환으로 교차검증이 시간축을 존중하도록 수정.
-> 보고되는 CV 숫자가 이전보다 정직하게 반영되도록 개선됨. 자세한 배경: `limitations_and_improvements.md` 및 Strategic Review 1번 병목 참고.
+> **2026-04-14 업데이트 #1 (P0)**: `KFold(shuffle=True)` → `TimeSeriesSplit` 전환으로 교차검증이 시간축을 존중하도록 수정.
+> **2026-04-14 업데이트 #2 (P1)**: Conformal Prediction 90% interval 추가 (`/predict/delay` response).
+> **2026-04-14 업데이트 #3 (P1)**: `TAIL_NUMBER` 기반 rotation features 5종 도입 + 전체 데이터셋(5.7M행)으로 재학습.
+> 자세한 배경: `limitations_and_improvements.md`, `event_model.md`, Strategic Review 1·2·4·5번 병목 참고.
 
 ## 1. 지연 예측 모델 (XGBoost)
 
@@ -13,37 +15,87 @@
 | LinearRegression | 25.34 | 11.49 | 0.038 | 87.8% | 22.8초 |
 | RidgeRegression | 25.33 | 11.49 | 0.038 | 87.9% | 3.8초 |
 | RandomForest (depth=10) | 24.69 | 11.29 | 0.086 | 88.2% | 620초 |
-| **XGBoost + Optuna (TimeSeriesCV)** | **24.60** | **11.80** | **0.0931** | **88.49%** | **3.9초** |
+| XGBoost + Optuna (P0 TimeSeriesCV) | 24.60 | 11.80 | 0.0931 | 88.49% | 3.9초 |
+| **XGBoost + Rotation + 5.7M dataset (P1)** | **22.61** | **8.79** | **0.3784** | **91.15%** | **106.8초** |
 
 ### 1.2 XGBoost 최종 성능 (데이터셋별)
 
-> CV 방식: **`TimeSeriesSplit(n_splits=5)` walk-forward validation** (2026-04-14 적용).
-> 이전 `KFold(shuffle=True)`는 미래 데이터 누수 위험이 있어 교체됨.
+> CV 방식: **`TimeSeriesSplit(n_splits=5)` walk-forward validation** (P0, 2026-04-14 적용).
+> **Feature set**: 20 numeric + 3 categorical (P0) → **25 numeric + 3 categorical (P1, +Rotation 5종)**.
+> **Dataset 규모**: 337K rows (P0) → **5.7M rows (P1, 전체 Kaggle 데이터)**. Train: 4.0M / Val: 857K / Test: 857K.
+
+#### P1 최종 결과 (2026-04-14 Rotation PoC + 전체 데이터셋)
 
 | 데이터셋 | RMSE (분) | MAE (분) | R² | 지연 정확도 |
 |----------|-----------|----------|-----|-----------|
-| Training | 32.68 | 16.34 | 0.2255 | 79.39% |
-| Validation | **24.60** | 11.80 | 0.0931 | **88.49%** |
-| Test | **36.52** | 15.46 | **0.0996** | 84.16% |
-| 5-Fold TimeSeriesCV | **32.66 ± 6.14** | 18.07 ± 4.31 | 0.0947 ± 0.0407 | — |
+| Training | 26.33 | 10.75 | 0.4792 | 88.34% |
+| **Validation** | **22.61** | **8.79** | **0.3784** | **91.15%** |
+| **Test** | **28.18** | **10.62** | **0.4328** | **89.04%** |
+| **5-Fold TimeSeriesCV** | **27.21 ± 1.51** | 11.60 ± 1.31 | 0.4467 ± 0.0197 | — |
 
-**핵심 관찰 (TimeSeriesSplit 전환 효과)**:
-- CV RMSE 표준편차가 **±0.30 → ±6.14**로 20배 증가. 이전 shuffle 기반 CV가 **숨기고 있던 시간대별 성능 변동성**이 정직하게 드러남.
-- Val/Test 절대값은 거의 동일 (`prepare_dataset.py`의 train/val/test 분할이 이미 fl_date 기준 temporal split이었기 때문).
-- Val-Test 갭 12분 (24.60 → 36.52)은 시간축 leakage가 아닌 **test 기간의 난이도 차이** 또는 feature 자체 한계에서 기인. 후속 개선 과제 (Rotation/ATFM/NOTAM feature, Conformal Prediction).
+#### P1 개선 효과 (P0 TimeSeriesSplit 기준 대비)
 
-### 1.3 Optuna 최적 하이퍼파라미터 (2026-04-14 재탐색)
+| 지표 | P0 (337K, 20 numeric) | **P1 (5.7M, +Rotation)** | 변화 |
+|------|----------------------|--------------------------|------|
+| Val RMSE | 24.60 | **22.61** | **-1.99분 (-8.1%)** |
+| **Test RMSE** | 36.52 | **28.18** | **-8.34분 (-22.8%!)** |
+| **Test R²** | 0.0996 | **0.4328** | **+335%!** |
+| Val R² | 0.0931 | **0.3784** | +306% |
+| Delay Accuracy (Val) | 88.49% | **91.15%** | +2.66%p |
+| Delay Accuracy (Test) | 84.16% | **89.04%** | +4.88%p |
+| 5-Fold CV RMSE (std) | 32.66 ± **6.14** | 27.21 ± **1.51** | **std 4배 감소** |
+| **Val-Test gap (RMSE)** | 12분 | **5.5분** | **격차 절반** |
+
+**핵심 관찰 (P1 Rotation + Full Dataset 효과)**:
+- **Test R² 0.0996 → 0.4328**: 지연 예측 모델이 실제 분산의 ~43%를 설명 가능. P0 대비 3배 이상.
+- **Val-Test 갭 12분 → 5.5분**: 일반화 실패의 근본 원인이 **rotation-aware feature 부족**과 **데이터 규모**에 있었음을 확인. Temporal split과 무관.
+- **CV std 6.14 → 1.51 (4배↓)**: 시간대별 성능 변동성도 크게 감소. 모델이 더 안정적.
+- **지연 정확도 91.15% (Val)**: 목표 75% 대비 +16.15%p, 이진 분류 측면에서는 production-ready 수준.
+- **학습 시간 3.9초 → 106.8초**: 17배 더 큰 데이터셋 처리 비용. 여전히 2분 이내로 실용적.
+
+### 1.3 Optuna 최적 하이퍼파라미터 (2026-04-14 P1 재탐색, 15 trials)
 
 | 파라미터 | 값 |
 |----------|-----|
-| n_estimators | 219 |
-| max_depth | 7 |
-| learning_rate | 0.01374 |
-| subsample | 0.7428 |
-| colsample_bytree | 0.6358 |
-| min_child_weight | 9 |
-| reg_alpha | 0.01806 |
-| reg_lambda | 0.01865 |
+| n_estimators | 796 |
+| max_depth | 8 |
+| learning_rate | 0.02155 |
+| subsample | 0.9783 |
+| colsample_bytree | 0.5359 |
+| min_child_weight | 18 |
+| reg_alpha | 5.5892 |
+| reg_lambda | 0.001586 |
+| Best Optuna RMSE | **26.83** (TimeSeriesCV 3-fold) |
+
+### 1.4 Conformal Prediction Interval (P1 · 2026-04-14)
+
+**알고리즘**: MAPIE 1.3 `SplitConformalRegressor` (prefit mode, absolute residual)
+**Calibration set**: val.csv 857,101 samples (P0 72,308 대비 12배)
+**Confidence level**: 90% (alpha=0.1)
+
+| 지표 | 값 |
+|------|-----|
+| Target coverage | 90% |
+| **Empirical coverage (val self-test)** | **90.00%** ✅ |
+| **Average interval width** | **30.84분** (P0 38.74분 → -7.9분) |
+| Calibration RMSE | 22.61분 |
+
+**API 응답 예시** (`POST /predict/delay`):
+```json
+{
+  "predicted_delay_min": 5.4,
+  "is_delayed": false,
+  "confidence": "medium",
+  "prediction_interval": {
+    "lower_min": -10.0,
+    "upper_min": 20.9,
+    "confidence": 0.9,
+    "width_min": 30.8,
+    "method": "split_conformal_mapie_v1.3.0"
+  },
+  "latency_ms": 2178.2
+}
+```
 
 ### 1.4 모델 파일 크기
 

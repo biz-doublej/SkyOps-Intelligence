@@ -39,12 +39,16 @@ FEATURE_COLS = [
     "dep_dayofyear", "is_weekend",
     # 공항/노선
     "origin", "dest", "route", "distance_miles",
-    # 항공사
-    "carrier_code",
+    # 항공사 + 기체
+    "carrier_code", "tail_number",       # P1 Rotation PoC · 2026-04-14
     # 운항 계획
     "sched_elapsed_min", "dep_block",
     # Cascade Delay
     "prev_dep_delay_min", "prev_arr_delay_min", "is_prev_delayed",
+    # Rotation (P1 · 2026-04-14)
+    "rotation_depth", "prev_leg_arr_delay_min",
+    "scheduled_turnaround_min", "actual_turnaround_min",
+    "is_first_leg_of_day",
     # 혼잡도
     "origin_hourly_departures", "dest_hourly_arrivals",
     # 기상 이력
