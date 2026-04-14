@@ -26,6 +26,7 @@ from typing import Any
 
 PROJECT_ROOT = Path(__file__).parent.parent
 CHUNKS_JSONL = PROJECT_ROOT / "data/icao/chunks.jsonl"
+CORPUS_DIR   = PROJECT_ROOT / "data/icao/corpus"   # P4+ · 2026-04-14 · folder-based corpus
 VECTORDB_DIR = PROJECT_ROOT / "data/vectordb"
 COLLECTION   = "aviation_rag"
 
@@ -133,6 +134,79 @@ EXTRA_DOCS: list[dict[str, Any]] = [
 ]
 
 
+def scan_corpus_folder(base: Path) -> list[dict[str, Any]]:
+    """Scan data/icao/corpus/**/*.md and yield chunks (P4+ · 2026-04-14).
+
+    각 Markdown 파일은 frontmatter (optional) + content 구조.
+    Content는 `## heading` 기반으로 chunk 분리한다.
+
+    메타데이터:
+      - source: frontmatter source 또는 파일 경로
+      - domain: frontmatter domain 또는 parent folder name
+      - section: heading text
+      - doc_title: 파일명 또는 첫 # heading
+
+    각 chunk는 chunk_id = f"{folder}_{filename}_{section_slug}" 형식.
+    """
+    import re
+    chunks: list[dict[str, Any]] = []
+    if not base.exists():
+        print(f"     (corpus folder 없음: {base})")
+        return chunks
+
+    for md_file in sorted(base.rglob("*.md")):
+        text = md_file.read_text(encoding="utf-8")
+        domain = md_file.parent.name
+
+        # Frontmatter parse (optional YAML between --- lines)
+        frontmatter: dict[str, str] = {}
+        if text.startswith("---"):
+            parts = text.split("---", 2)
+            if len(parts) >= 3:
+                fm_block = parts[1]
+                for line in fm_block.splitlines():
+                    if ":" in line:
+                        k, _, v = line.partition(":")
+                        frontmatter[k.strip()] = v.strip()
+                text = parts[2].lstrip()
+
+        source = frontmatter.get("source", f"{domain}/{md_file.stem}")
+        fm_domain = frontmatter.get("domain", domain)
+        doc_title = frontmatter.get("section", md_file.stem)
+
+        # Split by ## headings
+        sections = re.split(r"^## ", text, flags=re.MULTILINE)
+        # sections[0] is preamble (before first ##); skip if empty/short
+        for i, sec in enumerate(sections):
+            sec = sec.strip()
+            if not sec or len(sec) < 80:
+                continue
+            # First line is heading (unless first section which has no ##)
+            if i == 0:
+                heading = doc_title
+                body = sec
+            else:
+                head_line, _, body = sec.partition("\n")
+                heading = head_line.strip()
+                body = body.strip()
+
+            if not body or len(body) < 50:
+                continue
+
+            slug = re.sub(r"[^a-z0-9]+", "_", heading.lower())[:50].strip("_")
+            chunk_id = f"corpus_{domain}_{md_file.stem}_{slug or i}"
+
+            chunks.append({
+                "chunk_id": chunk_id,
+                "text": body,
+                "source": source,
+                "section": heading[:200],
+                "domain": fm_domain,
+                "doc_title": doc_title,
+            })
+    return chunks
+
+
 def build_vectordb(reset: bool = False, show_stats: bool = False) -> None:
     print("=" * 60)
     print("  SkyOps Intelligence — ChromaDB 벡터 DB 구축")
@@ -179,9 +253,14 @@ def build_vectordb(reset: bool = False, show_stats: bool = False) -> None:
                     docs.append(json.loads(line))
         print(f"     ICAO chunks.jsonl: {len(docs)}건")
 
-    # 인라인 추가 문서
+    # P4+ · 2026-04-14 · Corpus folder scanner
+    corpus_chunks = scan_corpus_folder(CORPUS_DIR)
+    docs.extend(corpus_chunks)
+    print(f"     Corpus folder chunks: {len(corpus_chunks)}건  ({CORPUS_DIR.relative_to(PROJECT_ROOT)})")
+
+    # 인라인 추가 문서 (legacy)
     docs.extend(EXTRA_DOCS)
-    print(f"     추가 항공 도메인 문서: {len(EXTRA_DOCS)}건")
+    print(f"     추가 항공 도메인 문서 (legacy EXTRA_DOCS): {len(EXTRA_DOCS)}건")
     print(f"     총 문서: {len(docs)}건")
 
     # ── 4. 이미 임베딩된 항목 제외 ──────────────────────────────────
