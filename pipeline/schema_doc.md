@@ -1,7 +1,8 @@
 # SkyOps Intelligence — Kafka 토픽 데이터 스키마 문서
 
-> 작성일: 2026-03-21  
-> 버전: v1.0 (2주차)
+> 초판: 2026-03-21  
+> **v2.0**: 2026-04-15 (P4+ Sprint) — `atfm-restriction`, `notam` 토픽 추가
+> 전체 Canonical Event Model은 [docs/event_model.md](../docs/event_model.md) 참고
 
 ---
 
@@ -100,10 +101,53 @@
 
 ---
 
+## 4. `atfm-restriction` 토픽 (P4+ · 2026-04-15)
+
+**설명**: Air Traffic Flow Management 제약 이벤트 — GDP, departure slot, rerouting, closure
+**현재 상태**: 🟡 Mock producer (`pipeline/atfm_producer.py`, ATFM_MODE=mock)
+**Producer (mock)**: 60초 간격 샘플 이벤트 발행
+**Producer (real, P5+ 이연)**: EUROCONTROL NM B2B / FAA CSS-Wx 연동
+**Partition key**: `restriction_id`
+
+자세한 스키마는 `docs/event_model.md` 2.5 ATFMRestrictionEvent 참고.
+
+주요 필드:
+- `restriction_id`, `restriction_type` (GROUND_DELAY_PROGRAM / DEPARTURE_SLOT / SPEED_RESTRICTION / ALTITUDE_RESTRICTION / REROUTING / CLOSURE)
+- `affected_airports`, `affected_airspace`
+- `reason` (WEATHER / TRAFFIC_CONGESTION / RUNWAY_CLOSURE / SECURITY / EQUIPMENT_OUTAGE)
+- `effective_from`, `effective_until`, `expected_duration_min`, `delay_expectation_min`
+- `issuing_authority` (FAA / EUROCONTROL / KAC / CAAC)
+- `initiative_name`
+
+---
+
+## 5. `notam` 토픽 (P4+ · 2026-04-15)
+
+**설명**: NOTAM (Notice to Airmen) 이벤트 스트림
+**현재 상태**: 🟡 Mock producer (`pipeline/notam_producer.py`, NOTAM_MODE=mock)
+**Producer (mock)**: 120초 간격 샘플 발행
+**Producer (real, P5+ 이연)**: FAA NOTAM API / KAC AIS 연동
+**Partition key**: `notam_id`
+
+자세한 스키마는 `docs/event_model.md` 2.6 NOTAMEvent 참고.
+
+주요 필드:
+- `notam_id`, `notam_series` (A/B/C/D/E/F)
+- `issue_date`, `effective_from`, `effective_until`
+- `affected_location` (type: AIRPORT/RUNWAY/TAXIWAY/WAYPOINT/AIRSPACE/NAVAID + identifier)
+- `notam_class` (AD / AS / NAV / COM / FDC)
+- `traffic_direction` (INBOUND / OUTBOUND / BOTH / OVERFLIGHT)
+- `text_raw`, `text_en`, `text_ko` (LLM 번역)
+- `operational_impact_score` (0.0 ~ 1.0)
+
+---
+
 ## 공통 규칙
 
 - 모든 타임스탬프: **UTC 기준**
 - `null` 값: 해당 센서/필드 데이터 미수신 또는 해당 없음
-- 파티션 키: 항공기 `icao24` 또는 공항 `icao` → 동일 항공기/공항 데이터가 같은 파티션으로 전송됨
+- 파티션 키: 항공기 `icao24` 또는 공항 `icao`, 제약 이벤트는 `restriction_id` / `notam_id`
 - 메시지 압축: **gzip**
 - 직렬화: **UTF-8 JSON**
+- 모든 이벤트는 `schema_version` 필드 포함 (2026-04-15 현재 "2.0")
+- Mock 이벤트는 `_mock: true` 플래그로 식별 (P5에서 제거 예정)

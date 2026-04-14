@@ -1,0 +1,217 @@
+"""
+SkyOps Intelligence — NOTAM Producer (P4+ · 2026-04-15)
+=========================================================
+`docs/event_model.md` 2.6 NOTAMEvent schema 준수.
+
+모드:
+    NOTAM_MODE=mock (default) — 샘플 NOTAM 120초마다 emit
+    NOTAM_MODE=api            — FAA NOTAM API / KAC AIS 연동 (P5 이연)
+
+실행:
+    python pipeline/notam_producer.py
+
+Topic: `notam`
+Partition key: notam_id
+"""
+
+from __future__ import annotations
+
+import json
+import logging
+import os
+import random
+import signal
+import sys
+import time
+import uuid
+from datetime import datetime, timedelta, timezone
+
+logger = logging.getLogger("notam_producer")
+logging.basicConfig(
+    format="%(asctime)s [%(levelname)s] %(message)s",
+    level=logging.INFO,
+)
+
+KAFKA_BOOTSTRAP = os.getenv("KAFKA_BOOTSTRAP_SERVERS", "localhost:9092")
+TOPIC = os.getenv("NOTAM_TOPIC", "notam")
+INTERVAL_SEC = int(os.getenv("NOTAM_INTERVAL_SEC", "120"))
+MODE = os.getenv("NOTAM_MODE", "mock").lower()
+SCHEMA_VERSION = "2.0"
+
+
+# ── Mock NOTAM pool ────────────────────────────────────────────────────
+MOCK_NOTAMS = [
+    {
+        "notam_series": "A",
+        "affected_location": {"type": "RUNWAY", "identifier": "RKSI/RWY15L-33R"},
+        "notam_class": "AD",
+        "traffic_direction": "BOTH",
+        "text_raw": "RWY 15L/33R CLOSED DUE TO PAVEMENT REPAIR",
+        "text_en": "Runway 15L/33R closed due to pavement repair. Alt RWY 15R/33L available.",
+        "text_ko": "활주로 15L/33R 노면 보수 폐쇄. 대체 활주로 15R/33L 사용 가능.",
+        "operational_impact_score": 0.7,
+        "icao_code": "RKRR",
+        "fir_code": "RKRR",
+    },
+    {
+        "notam_series": "A",
+        "affected_location": {"type": "NAVAID", "identifier": "RKSS/VOR-GMP"},
+        "notam_class": "NAV",
+        "traffic_direction": "BOTH",
+        "text_raw": "VOR GMP (114.10) U/S DUE TO GROUND EQUIP MAINT",
+        "text_en": "VOR GMP (114.10 MHz) unserviceable due to ground equipment maintenance.",
+        "text_ko": "VOR GMP (114.10 MHz) 지상 장비 정비로 사용 불가.",
+        "operational_impact_score": 0.4,
+        "icao_code": "RKRR",
+        "fir_code": "RKRR",
+    },
+    {
+        "notam_series": "B",
+        "affected_location": {"type": "AIRPORT", "identifier": "EGLL"},
+        "notam_class": "AD",
+        "traffic_direction": "BOTH",
+        "text_raw": "ILS CAT III RWY 09L U/S. CAT I ONLY",
+        "text_en": "ILS CAT III RWY 09L unserviceable. Only CAT I available. DH 200 ft, RVR 550 m minimum.",
+        "text_ko": "RWY 09L ILS CAT III 사용 불가. CAT I만 가능. 최저 DH 200ft, RVR 550m.",
+        "operational_impact_score": 0.8,
+        "icao_code": "EGTT",
+        "fir_code": "EGTT",
+    },
+    {
+        "notam_series": "C",
+        "affected_location": {"type": "AIRSPACE", "identifier": "ZOA-SECTOR-15"},
+        "notam_class": "AS",
+        "traffic_direction": "BOTH",
+        "text_raw": "ZOA SECTOR 15 RESTRICTED DUE TO WILDFIRE SMOKE FL100-FL240",
+        "text_en": "Oakland Center Sector 15 restricted FL100-FL240 due to wildfire smoke reducing visibility.",
+        "text_ko": "오클랜드 센터 15 섹터 FL100~FL240 구간 산불 연기로 가시거리 저하, 제한 운영.",
+        "operational_impact_score": 0.6,
+        "icao_code": "KZOA",
+        "fir_code": "KZOA",
+    },
+    {
+        "notam_series": "A",
+        "affected_location": {"type": "TAXIWAY", "identifier": "RKSI/TWY-B3"},
+        "notam_class": "AD",
+        "traffic_direction": "BOTH",
+        "text_raw": "TWY B3 CLOSED AT RKSI",
+        "text_en": "Taxiway B3 at Incheon closed for construction. Use TWY B2 or B4 as alternates.",
+        "text_ko": "인천공항 유도로 B3 건설로 폐쇄. 대체 TWY B2 또는 B4 사용.",
+        "operational_impact_score": 0.3,
+        "icao_code": "RKRR",
+        "fir_code": "RKRR",
+    },
+    {
+        "notam_series": "F",
+        "affected_location": {"type": "WAYPOINT", "identifier": "NOHEE"},
+        "notam_class": "FDC",
+        "traffic_direction": "BOTH",
+        "text_raw": "WPT NOHEE TEMPORARILY UNAVAILABLE",
+        "text_en": "Waypoint NOHEE (North Pacific) temporarily unavailable. File alternate route via FUKUE.",
+        "text_ko": "웨이포인트 NOHEE (북태평양) 일시 사용 불가. FUKUE 경유 대체 경로 제출 필요.",
+        "operational_impact_score": 0.5,
+        "icao_code": "RJJJ",
+        "fir_code": "RJJJ",
+    },
+]
+
+
+def make_kafka_producer():
+    try:
+        from kafka import KafkaProducer
+    except ImportError:
+        logger.error("kafka-python 미설치. pip install kafka-python")
+        sys.exit(1)
+
+    producer = KafkaProducer(
+        bootstrap_servers=KAFKA_BOOTSTRAP.split(","),
+        value_serializer=lambda v: json.dumps(v, ensure_ascii=False).encode("utf-8"),
+        key_serializer=lambda v: v.encode("utf-8") if v else None,
+        acks="all",
+        retries=3,
+        compression_type="gzip",
+    )
+    logger.info(f"✅ Kafka producer connected: {KAFKA_BOOTSTRAP}")
+    return producer
+
+
+def build_mock_notam(template: dict) -> dict:
+    """NOTAMEvent schema (event_model.md 2.6)."""
+    now = datetime.now(timezone.utc)
+    issue_date = now - timedelta(hours=random.randint(1, 12))
+    effective_from = now - timedelta(hours=random.randint(0, 6))
+    effective_until = now + timedelta(hours=random.randint(3, 48))
+
+    notam_id = f"{template['notam_series']}{random.randint(1000, 9999)}/{now.strftime('%y')}"
+
+    event = {
+        "schema_version": SCHEMA_VERSION,
+        "event_id": str(uuid.uuid4()),
+        "notam_id": notam_id,
+        "notam_series": template["notam_series"],
+        "issue_date": issue_date.isoformat(),
+        "effective_from": effective_from.isoformat(),
+        "effective_until": effective_until.isoformat(),
+        "affected_location": template["affected_location"],
+        "notam_class": template["notam_class"],
+        "traffic_direction": template["traffic_direction"],
+        "text_raw": template["text_raw"],
+        "text_en": template["text_en"],
+        "text_ko": template["text_ko"],
+        "operational_impact_score": template["operational_impact_score"],
+        "icao_code": template["icao_code"],
+        "fir_code": template["fir_code"],
+        "fetched_at": now.isoformat(),
+        "_mock": True,
+    }
+    return event
+
+
+def main():
+    if MODE != "mock":
+        logger.error(f"NOTAM_MODE={MODE} 미지원. 'mock' 만 지원.")
+        sys.exit(1)
+
+    producer = make_kafka_producer()
+
+    stopping = False
+
+    def _handle_sigint(*_):
+        nonlocal stopping
+        stopping = True
+
+    signal.signal(signal.SIGINT, _handle_sigint)
+    try:
+        signal.signal(signal.SIGTERM, _handle_sigint)
+    except AttributeError:
+        pass
+
+    logger.info(f"⚙️  NOTAM producer (mode={MODE}) → topic={TOPIC}, interval={INTERVAL_SEC}s")
+    count = 0
+    while not stopping:
+        template = random.choice(MOCK_NOTAMS)
+        event = build_mock_notam(template)
+        try:
+            fut = producer.send(TOPIC, key=event["notam_id"], value=event)
+            fut.get(timeout=10)
+            count += 1
+            loc = event["affected_location"]
+            logger.info(
+                f"📤 [{count}] {event['notam_id']:12s} {event['notam_class']:4s} "
+                f"{loc['type']:10s} {loc['identifier']:30s} impact={event['operational_impact_score']:.2f}"
+            )
+        except Exception as e:
+            logger.error(f"Kafka send 실패: {e}")
+
+        for _ in range(INTERVAL_SEC):
+            if stopping:
+                break
+            time.sleep(1)
+
+    producer.flush(10)
+    producer.close()
+    logger.info(f"✅ 종료 — 총 {count}건 발행")
+
+
+if __name__ == "__main__":
+    main()
