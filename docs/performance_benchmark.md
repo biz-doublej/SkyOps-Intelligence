@@ -181,6 +181,42 @@
 | 승객 안내문 | 125 | **0.225** | **0.170** | — | — |
 | 규정 QA | 44 | 0.090 | 0.064 | — | — |
 
+### 3.4 RAGAs Benchmark (P2 · 2026-04-14)
+
+> Strategic Review 7번 병목 — ROUGE/BLEU만으로 부족한 RAG 품질을 grounded 평가로 보완.
+> `evaluation/ragas_bench.py` (MAPIE 패턴과 유사, vLLM judge 시도 + proxy fallback).
+
+**Proxy Metrics** (30 samples stratified, no judge LLM required):
+
+| Metric | Mean | Std | 해석 |
+|--------|------|-----|------|
+| context_hit_rate | **0.0388** | 0.0588 | ground_truth 키워드가 context에 포함된 비율 (recall proxy) — ⚠️ 매우 낮음 |
+| answer_rouge_l | **0.0319** | 0.0741 | generated vs ground_truth ROUGE-L (LLM fallback 시 낮음) |
+| answer_length_ratio | **1.0000** | 0.0 | 80~500 chars 범위 (정상) |
+| retrieval_coverage | **1.0000** | 0.0 | len(contexts) / 4 (모두 충분히 검색됨) |
+
+**Type별 Breakdown**:
+
+| Type | N | context_hit_rate | answer_rouge_l |
+|------|---|------------------|----------------|
+| anomaly | 10 | 0.0243 | 0.0037 |
+| announcement | 10 | 0.0569 | 0.0668 |
+| regulation | 10 | 0.0353 | 0.0253 |
+
+**RAGAs 정식 지표** (vLLM judge 필요 — smoke test 시점에 vLLM 서버 미실행, APIConnectionError 로 전환 fallback 확인됨):
+- `faithfulness`, `answer_relevancy`, `context_precision`, `context_recall`
+- 향후 vLLM 가동 시 `python evaluation/ragas_bench.py --n 50 --judge vllm` 로 재측정 예정
+
+**⚠️ 정직한 진단**:
+- ChromaDB 내 문서가 **13개뿐** (`serving/04_build_vectordb.py` 샘플 EXTRA_DOCS + ICAO chunks). 이 때문에 context_hit_rate가 극도로 낮음. 운영 수준이 되려면 FAA AIM, NOTAM 전체, ICAO Doc 4444, airport-specific SOP 등 수천~수만 chunk로 확장 필요.
+- 현재 RAG는 advisory copilot 데모 수준. production 도입 전 grounding 품질 대폭 개선 필요.
+
+**후속 과제**:
+- ChromaDB 확장 (10K+ chunks)
+- Per-chunk citation 강제 (grounded generation)
+- vLLM judge vs OpenAI judge 비교
+- Hallucination detection threshold 튜닝
+
 ### 3.4 AWQ 양자화 + vLLM 서빙
 
 | 항목 | 값 |

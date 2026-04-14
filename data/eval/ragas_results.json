@@ -1,0 +1,52 @@
+{
+  "timestamp": "2026-04-14T13:56:47.642974+00:00",
+  "n_samples": 30,
+  "judge_mode": "proxy",
+  "ragas": {},
+  "proxy": {
+    "context_hit_rate": {
+      "mean": 0.0388,
+      "std": 0.0588,
+      "n": 30
+    },
+    "answer_rouge_l": {
+      "mean": 0.0319,
+      "std": 0.0741,
+      "n": 30
+    },
+    "answer_length_ratio": {
+      "mean": 1.0,
+      "std": 0.0,
+      "n": 30
+    },
+    "retrieval_coverage": {
+      "mean": 1.0,
+      "std": 0.0,
+      "n": 30
+    }
+  },
+  "per_type_breakdown": {
+    "anomaly": {
+      "n": 10,
+      "context_hit_rate": 0.0243,
+      "answer_rouge_l": 0.0037,
+      "answer_length_ratio": 1.0,
+      "retrieval_coverage": 1.0
+    },
+    "announcement": {
+      "n": 10,
+      "context_hit_rate": 0.0569,
+      "answer_rouge_l": 0.0668,
+      "answer_length_ratio": 1.0,
+      "retrieval_coverage": 1.0
+    },
+    "regulation": {
+      "n": 10,
+      "context_hit_rate": 0.0353,
+      "answer_rouge_l": 0.0253,
+      "answer_length_ratio": 1.0,
+      "retrieval_coverage": 1.0
+    }
+  },
+  "infer_elapsed_sec": 4.1
+}

@@ -11,3 +11,5 @@ mlflow>=2.18.0            # 2.18+ for protobuf 6.x compat (2026-04-14)
 lightgbm==4.3.0          # 비교 모델용 (선택)
 shap==0.45.1              # Feature Importance 해석
 mapie>=0.9.0              # Conformal Prediction — P1 (2026-04-14)
+ragas>=0.2.0              # RAG evaluation — P2 (2026-04-14)
+datasets>=2.14.0          # RAGAs dependency (HuggingFace datasets)
