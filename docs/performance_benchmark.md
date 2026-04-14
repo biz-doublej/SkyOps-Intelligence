@@ -1,5 +1,8 @@
 # SkyOps Intelligence — 시스템 전체 성능 벤치마크
 
+> **2026-04-14 업데이트**: `KFold(shuffle=True)` → `TimeSeriesSplit` 전환으로 교차검증이 시간축을 존중하도록 수정.
+> 보고되는 CV 숫자가 이전보다 정직하게 반영되도록 개선됨. 자세한 배경: `limitations_and_improvements.md` 및 Strategic Review 1번 병목 참고.
+
 ## 1. 지연 예측 모델 (XGBoost)
 
 ### 1.1 모델 성능 비교표 (Validation Set)
@@ -10,29 +13,37 @@
 | LinearRegression | 25.34 | 11.49 | 0.038 | 87.8% | 22.8초 |
 | RidgeRegression | 25.33 | 11.49 | 0.038 | 87.9% | 3.8초 |
 | RandomForest (depth=10) | 24.69 | 11.29 | 0.086 | 88.2% | 620초 |
-| **XGBoost + Optuna** | **24.64** | **11.50** | **0.090** | **88.3%** | **10.4초** |
+| **XGBoost + Optuna (TimeSeriesCV)** | **24.60** | **11.80** | **0.0931** | **88.49%** | **3.9초** |
 
 ### 1.2 XGBoost 최종 성능 (데이터셋별)
 
+> CV 방식: **`TimeSeriesSplit(n_splits=5)` walk-forward validation** (2026-04-14 적용).
+> 이전 `KFold(shuffle=True)`는 미래 데이터 누수 위험이 있어 교체됨.
+
 | 데이터셋 | RMSE (분) | MAE (분) | R² | 지연 정확도 |
 |----------|-----------|----------|-----|-----------|
-| Training | 31.30 | 15.49 | 0.290 | 81.0% |
-| Validation | 24.64 | 11.50 | 0.090 | 88.3% |
-| Test | 36.59 | 15.30 | 0.096 | 83.9% |
-| 5-Fold CV | 32.18 ± 0.30 | 15.56 ± 0.05 | 0.249 ± 0.009 | — |
+| Training | 32.68 | 16.34 | 0.2255 | 79.39% |
+| Validation | **24.60** | 11.80 | 0.0931 | **88.49%** |
+| Test | **36.52** | 15.46 | **0.0996** | 84.16% |
+| 5-Fold TimeSeriesCV | **32.66 ± 6.14** | 18.07 ± 4.31 | 0.0947 ± 0.0407 | — |
 
-### 1.3 Optuna 최적 하이퍼파라미터
+**핵심 관찰 (TimeSeriesSplit 전환 효과)**:
+- CV RMSE 표준편차가 **±0.30 → ±6.14**로 20배 증가. 이전 shuffle 기반 CV가 **숨기고 있던 시간대별 성능 변동성**이 정직하게 드러남.
+- Val/Test 절대값은 거의 동일 (`prepare_dataset.py`의 train/val/test 분할이 이미 fl_date 기준 temporal split이었기 때문).
+- Val-Test 갭 12분 (24.60 → 36.52)은 시간축 leakage가 아닌 **test 기간의 난이도 차이** 또는 feature 자체 한계에서 기인. 후속 개선 과제 (Rotation/ATFM/NOTAM feature, Conformal Prediction).
+
+### 1.3 Optuna 최적 하이퍼파라미터 (2026-04-14 재탐색)
 
 | 파라미터 | 값 |
 |----------|-----|
-| n_estimators | 500 |
+| n_estimators | 219 |
 | max_depth | 7 |
-| learning_rate | 0.05 |
-| subsample | 0.8 |
-| colsample_bytree | 0.8 |
-| min_child_weight | 5 |
-| reg_alpha | 0.1 |
-| reg_lambda | 1.0 |
+| learning_rate | 0.01374 |
+| subsample | 0.7428 |
+| colsample_bytree | 0.6358 |
+| min_child_weight | 9 |
+| reg_alpha | 0.01806 |
+| reg_lambda | 0.01865 |
 
 ### 1.4 모델 파일 크기
 

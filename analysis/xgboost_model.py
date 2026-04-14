@@ -43,7 +43,7 @@ import pandas as pd
 from sklearn.compose import ColumnTransformer
 from sklearn.impute import SimpleImputer
 from sklearn.metrics import mean_absolute_error, r2_score, root_mean_squared_error
-from sklearn.model_selection import KFold
+from sklearn.model_selection import TimeSeriesSplit
 from sklearn.pipeline import Pipeline
 from sklearn.preprocessing import OrdinalEncoder, StandardScaler
 
@@ -100,6 +100,14 @@ def load_splits():
     val   = pd.read_csv(PROCESSED / "val.csv",   low_memory=False)
     test  = pd.read_csv(PROCESSED / "test.csv",  low_memory=False)
     print(f"✅ 데이터 로드: train={len(train):,} / val={len(val):,} / test={len(test):,}")
+
+    # TimeSeriesSplit 유효성을 위해 train.csv가 fl_date 오름차순이어야 함
+    # (prepare_dataset.py의 temporal_split이 이미 정렬하지만 방어적 체크)
+    if "fl_date" in train.columns:
+        if not train["fl_date"].is_monotonic_increasing:
+            print("⚠️  train.csv가 fl_date로 정렬되지 않음 → 재정렬 수행")
+            train = train.sort_values("fl_date").reset_index(drop=True)
+
     return train, val, test
 
 
@@ -128,11 +136,19 @@ def compute_metrics(y_true, y_pred, split: str = "val") -> dict:
 
 
 def run_manual_xgb_cv(X, y, params: dict, n_splits: int = 5) -> dict:
-    """XGBoost 수동 K-Fold CV.
+    """XGBoost 수동 TimeSeriesSplit 기반 walk-forward CV.
 
     scikit-learn / xgboost 버전 조합에 따라 `cross_validate()`가
     estimator tag 처리에서 실패할 수 있어, fold 루프를 직접 수행합니다.
     또한 fold별로 전처리를 다시 학습해 데이터 누설을 방지합니다.
+
+    [2026-04-14 변경] KFold(shuffle=True) → TimeSeriesSplit 전환.
+    지연 예측처럼 시간 순서가 중요한 문제에서 shuffled KFold는 미래
+    데이터가 과거 학습에 새어 들어가는 temporal leakage를 유발합니다.
+    TimeSeriesSplit은 expanding window 방식으로 각 fold의 train이
+    항상 val보다 앞선 시간대만 포함하도록 보장합니다.
+    입력 X, y는 호출자가 시간 순서로 정렬되어 있다고 가정합니다
+    (prepare_dataset.py가 fl_date로 정렬하여 저장).
     """
     try:
         import xgboost as xgb
@@ -140,7 +156,7 @@ def run_manual_xgb_cv(X, y, params: dict, n_splits: int = 5) -> dict:
         print("❌ pip install xgboost")
         sys.exit(1)
 
-    kf = KFold(n_splits=n_splits, shuffle=True, random_state=42)
+    kf = TimeSeriesSplit(n_splits=n_splits)
     rmse_scores: list[float] = []
     mae_scores: list[float] = []
     r2_scores: list[float] = []
@@ -221,9 +237,9 @@ def run_optuna(X_train, y_train, n_trials: int = 30) -> dict:
     return best
 
 
-# ── 5-Fold Cross Validation ───────────────────────────────────────────
+# ── 5-Fold TimeSeriesSplit Cross Validation ──────────────────────────
 def run_cross_validation(X_train, y_train, best_params: dict) -> dict:
-    print("\n📊 5-Fold Cross Validation 수행 중...")
+    print("\n📊 5-Fold TimeSeriesSplit Cross Validation 수행 중...")
     cv_metrics = run_manual_xgb_cv(X_train, y_train, best_params, n_splits=5)
     print(f"  RMSE: {cv_metrics['cv_rmse_mean']:.2f} ± {cv_metrics['cv_rmse_std']:.2f}분")
     print(f"  MAE:  {cv_metrics['cv_mae_mean']:.2f} ± {cv_metrics['cv_mae_std']:.2f}분")
@@ -293,7 +309,7 @@ def train_final_model(
     # Windows local paths should be passed as file:// URIs for MLflow.
     mlflow.set_tracking_uri((PROJECT_ROOT / "mlruns").as_uri())
     mlflow.set_experiment("SkyOps-XGBoost")
-    with mlflow.start_run(run_name="XGBoost_Optuna_5CV"):
+    with mlflow.start_run(run_name="XGBoost_Optuna_TimeSeriesCV"):
         mlflow.log_params(best_params)
         mlflow.log_params({"fit_sec": fit_sec})
         for k, v in cv_metrics.items():

@@ -3,9 +3,9 @@
 ## 1. 지연 예측 모델 한계
 
 ### 1.1 RMSE 목표 미달
-| 항목 | 목표 | 실측 | 차이 |
+| 항목 | 목표 | 실측 (Validation) | 차이 |
 |------|------|------|------|
-| RMSE | 15분 이하 | 24.64분 | +9.64분 |
+| RMSE | 15분 이하 | **24.60분** (2026-04-14 TimeSeriesCV 기준) | +9.60분 |
 
 **원인 분석:**
 - Kaggle 데이터셋(13,969건)은 미국 국내선 기준으로, 한국 공항 특성이 반영되지 않음
@@ -19,13 +19,15 @@
 4. LightGBM/CatBoost 추가 비교 실험
 
 ### 1.2 과적합 경향
-- Train R² (0.290) vs Test R² (0.096) 격차가 큼
+- Train R² (0.2255) vs Test R² (0.0996) 격차가 큼
 - Optuna 최적화가 Validation Set에 과적합되었을 가능성
 
 **개선 방향:**
 1. Nested Cross-Validation 적용
-2. 시간 기반 분할 (Time Series Split) 도입
+2. ✅ **시간 기반 분할 (Time Series Split) 도입 완료 (2026-04-14)** — `analysis/xgboost_model.py`의 `run_manual_xgb_cv()` 내부를 `KFold(shuffle=True)` → `TimeSeriesSplit(n_splits=N)`으로 교체. Optuna HPO와 최종 CV 모두 walk-forward validation을 수행하도록 변경. 결과: CV 표준편차가 ±0.30 → ±6.14로 20배 증가하여 이전 shuffle이 숨기고 있던 **시간대별 성능 변동성**이 정직하게 드러남. 자세한 숫자는 `performance_benchmark.md` 1.2절 참고.
 3. Feature Selection (Boruta, RFECV) 적용으로 노이즈 Feature 제거
+4. **[신규 · 2026-04-14]** Val-Test 갭 12분 잔존 → 시간축 leakage가 아닌 **Rotation/Turnaround/ATFM/NOTAM 등 운항 네트워크 feature 부족**이 주원인으로 추정. Strategic Review 4번 병목 참고. P1 후속 과제.
+5. **[신규 · 2026-04-14]** 단일 point estimate 대신 **Conformalized Quantile Regression** 도입으로 prediction interval 제공 검토. Strategic Review 2번 병목 참고. P1 후속 과제.
 
 ---
 
