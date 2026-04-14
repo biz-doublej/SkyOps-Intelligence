@@ -59,7 +59,13 @@
 - 실시간 테스트에서 이상 탐지 알림이 과다 발생 (대부분 LOW)
 - 이착륙 구간의 정상적 고도 변화를 이상으로 오탐지
 
-**개선 방향:**
+**개선 방향 (2026-04-14 진행 상황):**
+- ✅ **P3 ADR-001 Migration Phase 1 완료 (2026-04-14)** — `serving/api.py` 1120→107라인, `serving/common/` + `serving/routers/` 구조
+- ✅ **P3 OpenTelemetry 계측 완료 (2026-04-14)** — FastAPIInstrumentor + LoggingInstrumentor + Console/OTLP exporter, custom spans per router
+- ✅ **P3 Dashboard README 재작성 완료 (2026-04-14)** — Prototype smell 제거, Next.js 16 특화 내용
+- ✅ **P3 Active Learning 스크립트 완료 (2026-04-14)** — `analysis/active_learning.py`로 feedback.jsonl 자동 분석 + 권고 생성
+
+**잔여 개선 과제 (P4+ 이연):**
 1. ✅ **비행 단계(이륙/순항/접근/착륙)별 차등 임계값 적용 — 2026-04-14 P2 완료**
    - `pipeline/phase_classifier.py` heuristic FlightPhase classifier (7 phases + UNKNOWN)
    - `pipeline/cep_rules.py` PHASE_ALTITUDE/VELOCITY/PATH_MULTIPLIER 적용
