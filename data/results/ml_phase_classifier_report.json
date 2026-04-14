@@ -1,0 +1,147 @@
+{
+  "model_type": "xgboost",
+  "accuracy": 0.9999714285714286,
+  "train_samples": 1120000,
+  "test_samples": 280000,
+  "train_time_sec": 24.8,
+  "classification_report": {
+    "APPROACH": {
+      "precision": 1.0,
+      "recall": 1.0,
+      "f1-score": 1.0,
+      "support": 40000.0
+    },
+    "CLIMB": {
+      "precision": 0.9999499949995,
+      "recall": 0.99985,
+      "f1-score": 0.99989999499975,
+      "support": 40000.0
+    },
+    "CRUISE": {
+      "precision": 0.9998500149985001,
+      "recall": 0.99995,
+      "f1-score": 0.99990000499975,
+      "support": 40000.0
+    },
+    "DESCENT": {
+      "precision": 1.0,
+      "recall": 1.0,
+      "f1-score": 1.0,
+      "support": 40000.0
+    },
+    "LANDING": {
+      "precision": 1.0,
+      "recall": 1.0,
+      "f1-score": 1.0,
+      "support": 40000.0
+    },
+    "TAKEOFF": {
+      "precision": 1.0,
+      "recall": 1.0,
+      "f1-score": 1.0,
+      "support": 40000.0
+    },
+    "TAXI": {
+      "precision": 1.0,
+      "recall": 1.0,
+      "f1-score": 1.0,
+      "support": 40000.0
+    },
+    "accuracy": 0.9999714285714286,
+    "macro avg": {
+      "precision": 0.9999714299997143,
+      "recall": 0.9999714285714286,
+      "f1-score": 0.9999714285713571,
+      "support": 280000.0
+    },
+    "weighted avg": {
+      "precision": 0.9999714299997142,
+      "recall": 0.9999714285714286,
+      "f1-score": 0.999971428571357,
+      "support": 280000.0
+    }
+  },
+  "phases": [
+    "APPROACH",
+    "CLIMB",
+    "CRUISE",
+    "DESCENT",
+    "LANDING",
+    "TAKEOFF",
+    "TAXI"
+  ],
+  "confusion_matrix": [
+    [
+      40000,
+      0,
+      0,
+      0,
+      0,
+      0,
+      0
+    ],
+    [
+      0,
+      39994,
+      6,
+      0,
+      0,
+      0,
+      0
+    ],
+    [
+      0,
+      2,
+      39998,
+      0,
+      0,
+      0,
+      0
+    ],
+    [
+      0,
+      0,
+      0,
+      40000,
+      0,
+      0,
+      0
+    ],
+    [
+      0,
+      0,
+      0,
+      0,
+      40000,
+      0,
+      0
+    ],
+    [
+      0,
+      0,
+      0,
+      0,
+      0,
+      40000,
+      0
+    ],
+    [
+      0,
+      0,
+      0,
+      0,
+      0,
+      0,
+      40000
+    ]
+  ],
+  "feature_importance": {
+    "on_ground": 0.7167838215827942,
+    "baro_altitude": 0.12622439861297607,
+    "velocity": 0.023376623168587685,
+    "vertical_rate": 0.132772296667099,
+    "distance_miles": 0.0008239657618105412,
+    "air_time_min": 1.8872642613132484e-05
+  },
+  "trained_at": "2026-04-14T16:46:08.258996+00:00"
+}
