@@ -168,8 +168,30 @@ def build_mock_notam(template: dict) -> dict:
 
 
 def main():
+    if MODE == "swim":
+        logger.info("NOTAM_MODE=swim → FAA SWIM subscriber로 전환")
+        # Delegate to swim_subscriber
+        try:
+            from pathlib import Path
+            import importlib.util
+            spec = importlib.util.spec_from_file_location(
+                "swim_subscriber", Path(__file__).resolve().parent / "swim_subscriber.py"
+            )
+            mod = importlib.util.module_from_spec(spec)
+            spec.loader.exec_module(mod)
+            mod.main()
+        except SystemExit as e:
+            # swim_subscriber exits with code 2 on connection failure
+            if e.code == 2:
+                logger.warning("SWIM connection failed → fallback to mock mode")
+                globals()["MODE"] = "mock"
+            else:
+                raise
+        else:
+            return  # SWIM run completed normally
+
     if MODE != "mock":
-        logger.error(f"NOTAM_MODE={MODE} 미지원. 'mock' 만 지원.")
+        logger.error(f"NOTAM_MODE={MODE} 미지원. 'mock' or 'swim'.")
         sys.exit(1)
 
     producer = make_kafka_producer()
