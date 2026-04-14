@@ -52,6 +52,7 @@ PROCESSED    = DATA_DIR / "processed"
 MODELS_DIR   = DATA_DIR / "models"
 XGB_PATH     = MODELS_DIR / "xgboost_best.pkl"
 OUT_PATH     = MODELS_DIR / "conformal_calibrator.pkl"
+OUT_PATH_CQR = MODELS_DIR / "conformal_calibrator_cqr.pkl"  # P4+
 
 # ── 학습된 XGBoost 로드 ──────────────────────────────────────────────
 def load_xgb_pipeline() -> tuple:
@@ -98,10 +99,13 @@ def main():
     parser = argparse.ArgumentParser()
     parser.add_argument("--alpha", type=float, default=0.1,
                         help="Miscoverage level (0.1 = 90% confidence, 0.05 = 95%)")
+    parser.add_argument("--mode", choices=["split", "cqr"], default="split",
+                        help="Calibration mode: 'split' (symmetric abs residual, P1 default) "
+                             "or 'cqr' (Conformalized Quantile Regression, asymmetric, P4+)")
     args = parser.parse_args()
 
     print("="*65)
-    print(f"  SkyOps Intelligence — Conformal Calibrator (alpha={args.alpha})")
+    print(f"  SkyOps Intelligence — Conformal Calibrator (mode={args.mode}, alpha={args.alpha})")
     print("="*65)
 
     # 1. XGBoost pipeline 로드
@@ -129,20 +133,43 @@ def main():
     cal_rmse = float(root_mean_squared_error(y_val, y_pred_val))
     print(f"   Calibration RMSE: {cal_rmse:.2f} min")
 
-    # 5. MAPIE SplitConformalRegressor (prefit 모드)
+    # 5. MAPIE calibrator (mode에 따라 split 또는 CQR)
     confidence_level = 1 - args.alpha
-    print(f"\n🔧 MAPIE SplitConformalRegressor fit (confidence={confidence_level:.2f})...")
     t0 = time.time()
 
-    scr = SplitConformalRegressor(
-        estimator=xgb_model,
-        confidence_level=confidence_level,
-        prefit=True,                  # 이미 학습된 XGBoost 사용
-        conformity_score="absolute",  # |y - y_hat| — 대칭 interval
-    )
+    if args.mode == "split":
+        print(f"\n🔧 MAPIE SplitConformalRegressor fit (confidence={confidence_level:.2f})...")
+        scr = SplitConformalRegressor(
+            estimator=xgb_model,
+            confidence_level=confidence_level,
+            prefit=True,
+            conformity_score="absolute",  # |y - y_hat| — 대칭 interval
+        )
+        scr.conformalize(X_val_prep, y_val.values)
+    else:
+        # CQR mode — load quantile_lower.pkl / quantile_upper.pkl
+        from mapie.regression import ConformalizedQuantileRegressor
 
-    # 6. Conformalize (calibration)
-    scr.conformalize(X_val_prep, y_val.values)
+        lower_path = MODELS_DIR / "quantile_lower.pkl"
+        upper_path = MODELS_DIR / "quantile_upper.pkl"
+        for p in (lower_path, upper_path):
+            if not p.exists():
+                print(f"❌ {p} 없음. 먼저 python analysis/quantile_regression.py --alpha {args.alpha} 실행.")
+                sys.exit(1)
+        with open(lower_path, "rb") as f:
+            q_lower = pickle.load(f)["model"]
+        with open(upper_path, "rb") as f:
+            q_upper = pickle.load(f)["model"]
+
+        print(f"\n🔧 MAPIE ConformalizedQuantileRegressor fit (confidence={confidence_level:.2f})...")
+        # MAPIE 1.3 expects estimator = list [low, high] or [low, high, mean]
+        scr = ConformalizedQuantileRegressor(
+            estimator=[q_lower, q_upper, xgb_model],
+            confidence_level=confidence_level,
+            prefit=True,
+        )
+        scr.conformalize(X_val_prep, y_val.values)
+
     fit_sec = time.time() - t0
     print(f"   ✅ conformalize 완료: {fit_sec:.1f}초")
 
@@ -169,6 +196,7 @@ def main():
     model_hash = compute_model_hash()
     artifact = {
         "scr": scr,
+        "mode": args.mode,  # P4+ (2026-04-15) — "split" 또는 "cqr"
         "alpha": args.alpha,
         "confidence_level": confidence_level,
         "calibration_samples": int(len(y_val)),
@@ -178,18 +206,25 @@ def main():
         "model_version": f"xgboost_best.pkl#{model_hash}",
         "calibrated_at": datetime.now(timezone.utc).isoformat(),
         "mapie_version": "1.3.0",
-        "conformity_score": "absolute",
+        "conformity_score": "absolute" if args.mode == "split" else "quantile",
     }
 
-    with open(OUT_PATH, "wb") as f:
+    # P4+ · mode별 다른 파일에 저장 (split 모드는 기존 경로 유지)
+    out_path = OUT_PATH_CQR if args.mode == "cqr" else OUT_PATH
+    with open(out_path, "wb") as f:
         pickle.dump(artifact, f)
 
-    size_kb = OUT_PATH.stat().st_size / 1024
-    print(f"\n💾 저장: {OUT_PATH} ({size_kb:.1f} KB)")
+    size_kb = out_path.stat().st_size / 1024
+    print(f"\n💾 저장: {out_path} ({size_kb:.1f} KB)")
+    print(f"   Mode: {args.mode}")
     print(f"   Model version: {artifact['model_version']}")
     print(f"   Calibrated at: {artifact['calibrated_at']}")
     print("\n✅ Conformal calibration 완료")
-    print("   다음 단계: serving/api.py에서 _ModelStore.conformal() 로드")
+    if args.mode == "cqr":
+        print("   CQR artifact: data/models/conformal_calibrator_cqr.pkl")
+        print("   (serving은 아직 split 사용. cqr 전환은 common/model_store.py 에서 조정)")
+    else:
+        print("   다음 단계: serving/api.py에서 ModelStore.conformal() 로드")
 
 
 if __name__ == "__main__":
