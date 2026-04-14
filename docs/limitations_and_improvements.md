@@ -76,7 +76,15 @@
 - ✅ **Active Learning query**: `/active-learning/next` endpoint + `analysis/active_learning.py next-batch` CLI
 - ✅ **ATFM/NOTAM mock producers**: schema v2.0, event_model.md 2.5/2.6 준수, docker-compose.yml topic 추가
 
-### P5+ 이연 과제
+### P5+ 완료 (2026-04-15)
+- ✅ **FAA SWIM 실연동**: `pipeline/swim_subscriber.py` (Solace SMF + TLS c_rehash trust store), `pipeline/notam_producer.py NOTAM_MODE=swim` 디스패치, AIXM 5.1 + FAA `event:` 네임스페이스 파서. **60초간 219건 실 NOTAM 수신 검증 완료**.
+- ✅ **ML phase classifier**: `analysis/ml_phase_classifier.py` — XGBClassifier + silver-label (Kaggle features → 7 phase samples per row). 휴리스틱 대비 90.3% agreement. 이전 heuristic의 cliff edge 분류 문제 해소.
+- ✅ **Per-phase Isolation Forest**: `analysis/per_phase_isolation_forest.py` — 7개 IF 모델, phase별 contamination 튜닝 (TAXI 0.02 / APPROACH·LANDING 0.06). serving이 phase 분류 후 해당 IF 호출.
+- ✅ **OTel + Jaeger 로컬 검증**: `monitoring/otel-collector-config.yaml`, `docker-compose.prod.yml --profile observability`. `serving/api.py` → OTLP gRPC → Collector → Jaeger UI 전 구간 동작 확인 (`skyops-api` 서비스 등록, 3 traces × 3 spans 수집).
+- ✅ **Docker Desktop k8s 검증**: `k8s/local/redis-only.yaml` — namespace + ConfigMap + Redis + Service + smoke pod. Pod → Service → Pod DNS 해결 (`redis-cli -h redis ping → PONG`) 확인.
+- ✅ **Reproduction guide**: `docs/reproduction_guide.md` 419 라인 — `git clone` → FAA SWIM live까지 단일 문서. SWIM trust store 셋업 스크립트 + Mermaid 아키텍처 다이어그램 + sprint commit 히스토리 + 트러블슈팅 7종 포함.
+
+### P5+ 이연 → P6 후보 과제
 
 1. ✅ **비행 단계(이륙/순항/접근/착륙)별 차등 임계값 적용 — 2026-04-14 P2 완료**
    - `pipeline/phase_classifier.py` heuristic FlightPhase classifier (7 phases + UNKNOWN)
