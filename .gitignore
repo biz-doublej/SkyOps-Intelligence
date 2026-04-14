@@ -7,8 +7,14 @@
 .env.local
 .env.*.local
 secrets/
+data/secrets/
+data/analyst_feedback/feedback.jsonl
 *.pem
 *.key
+*.p12
+*.jks
+*.keystore
+*.truststore
 credentials.json
 gcp-sa-key.json
 
