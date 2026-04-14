@@ -1,0 +1,66 @@
+# SkyOps Intelligence Ingress (Traefik v3, ADR-002)
+#
+# 전제: Traefik이 traefik-system namespace에 설치됨
+#   helm install traefik traefik/traefik --namespace traefik-system --create-namespace
+#
+# DNS: api.skyops.example.com / dashboard.skyops.example.com 가 클러스터 Ingress IP를 가리킴
+
+---
+apiVersion: traefik.io/v1alpha1
+kind: IngressRoute
+metadata:
+  name: skyops-api
+  namespace: skyops
+spec:
+  entryPoints: [websecure]
+  routes:
+    - match: Host(`api.skyops.example.com`)
+      kind: Rule
+      services:
+        - name: skyops-api
+          port: 8000
+      middlewares:
+        - name: skyops-ratelimit
+        - name: skyops-retry
+  tls:
+    certResolver: letsencrypt
+---
+apiVersion: traefik.io/v1alpha1
+kind: IngressRoute
+metadata:
+  name: skyops-dashboard
+  namespace: skyops
+spec:
+  entryPoints: [websecure]
+  routes:
+    - match: Host(`skyops.example.com`)
+      kind: Rule
+      services:
+        - name: skyops-dashboard
+          port: 3000
+      middlewares:
+        - name: skyops-ratelimit
+  tls:
+    certResolver: letsencrypt
+---
+# Middlewares
+apiVersion: traefik.io/v1alpha1
+kind: Middleware
+metadata:
+  name: skyops-ratelimit
+  namespace: skyops
+spec:
+  rateLimit:
+    average: 100     # requests
+    period: 1m
+    burst: 200
+---
+apiVersion: traefik.io/v1alpha1
+kind: Middleware
+metadata:
+  name: skyops-retry
+  namespace: skyops
+spec:
+  retry:
+    attempts: 3
+    initialInterval: 100ms

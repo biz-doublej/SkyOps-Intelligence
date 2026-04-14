@@ -1,0 +1,65 @@
+# SkyOps Intelligence API server — production image
+# ADR-001 Phase 3 (P4+ · 2026-04-15)
+#
+# Build:
+#   docker build -f Dockerfile.api -t skyops/api:2.1.0 .
+# Run:
+#   docker run -p 8000:8000 --env-file .env skyops/api:2.1.0
+
+# ── Builder stage ────────────────────────────────────────────────────
+FROM python:3.11-slim AS builder
+
+WORKDIR /build
+
+# System deps for wheel build (xgboost, chromadb native extensions)
+RUN apt-get update && apt-get install -y --no-install-recommends \
+    build-essential \
+    git \
+    && rm -rf /var/lib/apt/lists/*
+
+COPY pyproject.toml /build/
+COPY serving/ /build/serving/
+COPY analysis/ /build/analysis/
+COPY pipeline/ /build/pipeline/
+COPY evaluation/ /build/evaluation/
+
+RUN pip install --no-cache-dir build wheel \
+ && python -m build --wheel --outdir /build/dist
+
+# ── Runtime stage ────────────────────────────────────────────────────
+FROM python:3.11-slim
+
+ENV PYTHONUNBUFFERED=1 \
+    PYTHONDONTWRITEBYTECODE=1 \
+    PIP_NO_CACHE_DIR=1 \
+    OTEL_ENABLED=1 \
+    OTEL_CONSOLE_EXPORTER=0 \
+    OTEL_OTLP_EXPORTER=1
+
+# Runtime system deps (libgomp for xgboost, libssl for chromadb)
+RUN apt-get update && apt-get install -y --no-install-recommends \
+    libgomp1 \
+    libssl3 \
+    curl \
+    && rm -rf /var/lib/apt/lists/*
+
+WORKDIR /app
+
+COPY --from=builder /build/dist/*.whl /tmp/
+RUN pip install /tmp/*.whl[serving,otel,pipeline,rag] \
+ && rm /tmp/*.whl
+
+# Non-packaged runtime scripts (numbered files are tricky to include in wheel)
+COPY serving/05_rag_chain.py /app/serving/
+COPY serving/04_build_vectordb.py /app/serving/
+
+# Runtime model artifacts go in /app/data (mount read-only volume)
+VOLUME ["/app/data"]
+
+EXPOSE 8000
+
+HEALTHCHECK --interval=30s --timeout=3s --start-period=15s --retries=3 \
+    CMD curl --fail http://localhost:8000/health || exit 1
+
+# Use editable-install entry point
+CMD ["python", "-m", "serving.api"]

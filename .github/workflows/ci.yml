@@ -1,0 +1,135 @@
+name: CI
+
+on:
+  push:
+    branches: [main, dev]
+  pull_request:
+    branches: [main, dev]
+
+jobs:
+  # ── Python ────────────────────────────────────────────────────────
+  python-lint:
+    name: Python lint (ruff)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+          cache: "pip"
+      - name: Install ruff
+        run: pip install ruff
+      - name: Ruff check
+        run: ruff check serving/ pipeline/ analysis/ evaluation/ --output-format=github
+
+  python-test:
+    name: Python tests
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+          cache: "pip"
+      - name: Install (editable)
+        run: |
+          pip install -e ".[serving,otel,pipeline,dev]"
+      - name: Import smoke test
+        run: |
+          python -c "import serving; print(serving.__version__)"
+          python -c "from serving.common.constants import API_VERSION; print(API_VERSION)"
+          python -c "from serving.common.models import DelayRequest, AnomalyRequest"
+          python -c "from serving.routers import gateway, delay, anomaly, rag, notification, streaming"
+      - name: Unit tests
+        run: |
+          if [ -d tests ]; then
+            pytest tests/ -v --tb=short
+          else
+            echo "⚠️  tests/ not yet populated — skip"
+          fi
+
+  # ── Dashboard (Next.js) ───────────────────────────────────────────
+  dashboard-lint:
+    name: Dashboard lint + build
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+          cache: "npm"
+          cache-dependency-path: dashboard/package-lock.json
+      - name: Install
+        working-directory: dashboard
+        run: npm ci
+      - name: Lint
+        working-directory: dashboard
+        run: npm run lint
+      - name: Build
+        working-directory: dashboard
+        run: npm run build
+
+  # ── Docker ────────────────────────────────────────────────────────
+  docker-build:
+    name: Docker build (dry-run, no push)
+    runs-on: ubuntu-latest
+    needs: [python-test, dashboard-lint]
+    steps:
+      - uses: actions/checkout@v4
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+      - name: Build API image
+        uses: docker/build-push-action@v5
+        with:
+          context: .
+          file: Dockerfile.api
+          push: false
+          tags: skyops/api:ci-${{ github.sha }}
+          cache-from: type=gha,scope=api
+          cache-to: type=gha,scope=api,mode=max
+      - name: Build Dashboard image
+        uses: docker/build-push-action@v5
+        with:
+          context: .
+          file: Dockerfile.dashboard
+          push: false
+          tags: skyops/dashboard:ci-${{ github.sha }}
+          cache-from: type=gha,scope=dashboard
+          cache-to: type=gha,scope=dashboard,mode=max
+
+  # ── Kubernetes manifest validation ────────────────────────────────
+  k8s-validate:
+    name: k8s manifest validation
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Install kubeval
+        run: |
+          wget -q https://github.com/instrumenta/kubeval/releases/latest/download/kubeval-linux-amd64.tar.gz
+          tar xf kubeval-linux-amd64.tar.gz
+          sudo mv kubeval /usr/local/bin
+      - name: Validate k8s manifests (skip Traefik CRDs)
+        run: |
+          kubeval k8s/namespace.yaml k8s/configmap.yaml \
+                  k8s/api-deployment.yaml k8s/api-service.yaml \
+                  k8s/dashboard-deployment.yaml k8s/redis-deployment.yaml \
+                  --ignore-missing-schemas
+
+  # ── Docs ──────────────────────────────────────────────────────────
+  docs-check:
+    name: Docs link check
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Check required docs exist
+        run: |
+          for f in README.md docs/event_model.md docs/performance_benchmark.md \
+                   docs/limitations_and_improvements.md docs/policy_proposal.md \
+                   docs/adr/README.md docs/adr/ADR-001-service-decomposition.md \
+                   docs/adr/ADR-002-api-gateway-selection.md; do
+            if [ ! -f "$f" ]; then
+              echo "❌ missing: $f"
+              exit 1
+            fi
+          done
+          echo "✅ all required docs present"

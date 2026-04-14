@@ -1,0 +1,41 @@
+apiVersion: v1
+kind: Service
+metadata:
+  name: skyops-api
+  namespace: skyops
+  labels:
+    app: skyops-api
+spec:
+  type: ClusterIP
+  selector:
+    app: skyops-api
+  ports:
+    - name: http
+      port: 8000
+      targetPort: http
+      protocol: TCP
+---
+# Persistent Volume Claims for models + vectordb (read-only shared)
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: skyops-models-pvc
+  namespace: skyops
+spec:
+  accessModes:
+    - ReadOnlyMany
+  resources:
+    requests:
+      storage: 10Gi
+---
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: skyops-vectordb-pvc
+  namespace: skyops
+spec:
+  accessModes:
+    - ReadOnlyMany
+  resources:
+    requests:
+      storage: 5Gi

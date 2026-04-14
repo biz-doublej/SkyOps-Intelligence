@@ -1,0 +1,41 @@
+# SkyOps Intelligence Dashboard — production image
+# ADR-001 Phase 3 (P4+ · 2026-04-15)
+#
+# Build:
+#   docker build -f Dockerfile.dashboard -t skyops/dashboard:2.1.0 .
+# Run:
+#   docker run -p 3000:3000 -e NEXT_PUBLIC_API_URL=http://api:8000 skyops/dashboard:2.1.0
+
+# ── Builder ──────────────────────────────────────────────────────────
+FROM node:20-alpine AS builder
+
+WORKDIR /app
+
+COPY dashboard/package.json dashboard/package-lock.json* /app/
+RUN npm ci
+
+COPY dashboard/ /app/
+
+ENV NODE_ENV=production
+RUN npm run build
+
+# ── Runtime ──────────────────────────────────────────────────────────
+FROM node:20-alpine
+
+WORKDIR /app
+
+ENV NODE_ENV=production \
+    PORT=3000
+
+# Copy only production artifacts
+COPY --from=builder /app/.next /app/.next
+COPY --from=builder /app/public /app/public
+COPY --from=builder /app/node_modules /app/node_modules
+COPY --from=builder /app/package.json /app/
+
+EXPOSE 3000
+
+HEALTHCHECK --interval=30s --timeout=3s --start-period=10s --retries=3 \
+    CMD wget --quiet --tries=1 --spider http://localhost:3000 || exit 1
+
+CMD ["npm", "start"]

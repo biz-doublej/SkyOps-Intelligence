@@ -1,0 +1,8 @@
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: skyops
+  labels:
+    app: skyops
+    part-of: skyops-intelligence
+    managed-by: adr-001

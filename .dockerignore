@@ -1,0 +1,91 @@
+# SkyOps Intelligence — .dockerignore
+# Don't ship development / data / ephemeral files into container images.
+
+# VCS
+.git
+.gitignore
+.gitattributes
+
+# Claude
+.claude
+
+# Python
+__pycache__
+*.pyc
+*.pyo
+*.pyd
+.Python
+*.egg-info
+*.egg
+.pytest_cache
+.ruff_cache
+.mypy_cache
+.tox
+
+# Virtual envs
+.venv
+llm_venv
+venv
+env
+
+# Node
+node_modules
+.next
+.next.dev
+out
+
+# Data (이미지는 read-only volume mount)
+data/raw
+data/processed
+data/vectordb
+data/models
+data/figures
+data/results
+data/analyst_feedback
+data/eval/*.jsonl
+data/eval/*.json
+llm_data
+
+# MLflow
+mlruns
+mlartifacts
+
+# Airflow
+airflow/logs
+airflow/dags/__pycache__
+
+# Logs
+*.log
+producer.log
+logs/
+
+# OS
+.DS_Store
+Thumbs.db
+
+# IDE
+.vscode
+.idea
+*.swp
+*.swo
+
+# Docs (mostly not needed in runtime image)
+docs/*.pdf
+*.pptx
+*.docx
+*.xlsx
+
+# Temp
+*.tmp
+*.bak
+*.bak-*
+tmp/
+
+# Env files (secrets)
+.env
+.env.local
+.env.production
+credentials.json
+*.pem
+*.b64
+*_jwt_*
