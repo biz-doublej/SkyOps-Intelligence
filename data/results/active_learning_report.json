@@ -1,0 +1,37 @@
+{
+  "total": 2,
+  "date_range": {
+    "min": "2026-04-14T14:06:20.802645+00:00",
+    "max": "2026-04-14T14:35:51.967974+00:00",
+    "span_days": 0
+  },
+  "label_distribution": {
+    "false_positive": 1,
+    "true_positive": 1
+  },
+  "fp_rate": 0.5,
+  "uncertain_rate": 0.0,
+  "weekly_trend": {
+    "2026-W16": 2
+  },
+  "top_labelers": [
+    {
+      "labeler": "analyst_01",
+      "count": 1
+    },
+    {
+      "labeler": "p3",
+      "count": 1
+    }
+  ],
+  "per_label_by_week": {
+    "2026-W16": {
+      "false_positive": 1,
+      "true_positive": 1
+    }
+  },
+  "recommendations": [
+    "🟡 WARN: FP rate 50.0% > 30% → anomaly rule threshold 재검토 권장",
+    "📊 Feedback 표본 부족 (n=2) → 최소 50건 이상 수집 후 재분석 권장"
+  ]
+}
