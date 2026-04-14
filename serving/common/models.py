@@ -149,6 +149,30 @@ class AnnouncementRequest(BaseModel):
     details: Optional[str] = None
 
 
+# ── Active Learning Uncertainty Sampling (P4+ · 2026-04-15) ───────────
+class ActiveLearningItem(BaseModel):
+    """단일 anomaly 이벤트의 라벨링 우선순위 항목."""
+    alert_id: str
+    anomaly_score: float
+    anomaly_type: str
+    severity: str
+    flight_phase: Optional[str] = None
+    icao24: Optional[str] = None
+    callsign: Optional[str] = None
+    description: str
+    uncertainty_score: float = Field(..., ge=0.0, le=1.0,
+                                      description="0~1 (1=가장 불확실, threshold 근접)")
+
+
+class ActiveLearningQuery(BaseModel):
+    """`/active-learning/next` 응답."""
+    items: list[ActiveLearningItem]
+    total_pending: int = Field(..., description="Redis stream 내 unlabeled 총 건수")
+    returned_count: int
+    query_strategy: str = "uncertainty_sampling_v1"
+    generated_at: str  # ISO 8601 UTC
+
+
 # forward reference 해소 — `from __future__ import annotations` 대응
 DelayRequest.model_rebuild()
 DelayResponse.model_rebuild()
@@ -160,3 +184,5 @@ AnomalyExplainRequest.model_rebuild()
 ChatRequest.model_rebuild()
 ChatResponse.model_rebuild()
 AnnouncementRequest.model_rebuild()
+ActiveLearningItem.model_rebuild()
+ActiveLearningQuery.model_rebuild()

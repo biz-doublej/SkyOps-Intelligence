@@ -269,14 +269,73 @@ def render_markdown(report: dict) -> str:
     return "\n".join(lines)
 
 
+def fetch_next_batch_cli(top_k: int = 20, api_url: str = "http://localhost:8000") -> None:
+    """P4+ · 2026-04-15 · CLI for /active-learning/next.
+
+    API 서버에 GET /active-learning/next?top_k=N 요청 후 결과를 콘솔에 표시.
+    운영자가 라벨링 대기 queue를 빠르게 훑어보는 용도.
+    """
+    import urllib.request as ur
+    import urllib.parse as up
+
+    url = f"{api_url.rstrip('/')}/active-learning/next?{up.urlencode({'top_k': top_k})}"
+    print(f"🔍 GET {url}")
+    try:
+        with ur.urlopen(url, timeout=10) as r:
+            data = json.loads(r.read())
+    except Exception as e:
+        print(f"❌ API 호출 실패: {e}")
+        return
+
+    items = data.get("items", [])
+    print(f"\n📬 Pending: {data.get('total_pending', 0)}, Returned: {data.get('returned_count', 0)}")
+    print(f"   Strategy: {data.get('query_strategy')}")
+    print(f"   Generated: {data.get('generated_at')}")
+
+    if not items:
+        print("   (라벨링 대기 항목 없음 — Redis 미가용 또는 스트림 비어있음)")
+        return
+
+    print("\n" + "─" * 75)
+    print(f"  {'Rank':4s} {'Uncertainty':12s} {'Severity':10s} {'Type':18s} {'Phase':10s} Description")
+    print("─" * 75)
+    for i, item in enumerate(items, 1):
+        desc = (item.get("description", "") or "")[:60]
+        print(
+            f"  {i:4d} "
+            f"{item['uncertainty_score']:<12.4f} "
+            f"{item.get('severity', '?'):<10s} "
+            f"{item.get('anomaly_type', '?'):<18s} "
+            f"{item.get('flight_phase', '-') or '-':<10s} "
+            f"{desc}"
+        )
+    print("─" * 75)
+    print("\n라벨 제출: POST /anomaly/feedback (alert_id + label)")
+
+
 def main():
     parser = argparse.ArgumentParser(description="SkyOps analyst feedback analysis")
+    subparsers = parser.add_subparsers(dest="subcommand", help="sub-commands")
+
+    # Sub-command: next-batch (P4+ · 2026-04-15)
+    next_p = subparsers.add_parser(
+        "next-batch",
+        help="Fetch uncertainty-sampling queue from /active-learning/next"
+    )
+    next_p.add_argument("--top-k", type=int, default=20, help="Items to fetch")
+    next_p.add_argument("--api-url", type=str, default="http://localhost:8000")
+
+    # Default: analyze
     parser.add_argument("--feedback", type=Path, default=FEEDBACK_FILE,
                         help="Path to feedback.jsonl (default: data/analyst_feedback/feedback.jsonl)")
     parser.add_argument("--since", type=str, default=None,
                         help="Filter records since ISO date (e.g. 2026-01-01)")
     parser.add_argument("--output-dir", type=Path, default=RESULTS_DIR)
     args = parser.parse_args()
+
+    if args.subcommand == "next-batch":
+        fetch_next_batch_cli(top_k=args.top_k, api_url=args.api_url)
+        return
 
     print("=" * 65)
     print("  SkyOps Active Learning — Feedback Analysis")

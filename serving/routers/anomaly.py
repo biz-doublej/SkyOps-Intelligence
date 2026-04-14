@@ -7,6 +7,7 @@ P2 Phase-aware detection + Redis debounce + Analyst feedback stub.
 from __future__ import annotations
 
 import json as _json
+import math
 import time
 from datetime import datetime, timezone
 
@@ -20,9 +21,12 @@ from common.constants import (
     IF_SCORE_THRESHOLD,
     REDIS_AIRCRAFT_PHASE,
     REDIS_ANOMALY_DEBOUNCE,
+    REDIS_ANOMALY_STREAM,
 )
 from common.model_store import ModelStore
 from common.models import (
+    ActiveLearningItem,
+    ActiveLearningQuery,
     AnomalyFeedbackRequest,
     AnomalyFeedbackResponse,
     AnomalyRequest,
@@ -143,4 +147,139 @@ def submit_anomaly_feedback(req: AnomalyFeedbackRequest) -> AnomalyFeedbackRespo
         saved=True,
         alert_id=req.alert_id,
         file_path=str(FEEDBACK_FILE),
+    )
+
+
+# ──────────────────────────────────────────────────────────────────────
+# GET /active-learning/next — Uncertainty sampling queue (P4+ · 2026-04-15)
+# ──────────────────────────────────────────────────────────────────────
+
+def _load_labeled_alert_ids() -> set[str]:
+    """이미 라벨된 alert_id를 feedback.jsonl에서 로드."""
+    if not FEEDBACK_FILE.exists():
+        return set()
+    labeled: set[str] = set()
+    try:
+        with open(FEEDBACK_FILE, "r", encoding="utf-8") as f:
+            for line in f:
+                line = line.strip()
+                if not line:
+                    continue
+                try:
+                    rec = _json.loads(line)
+                    if rec.get("alert_id"):
+                        labeled.add(rec["alert_id"])
+                except _json.JSONDecodeError:
+                    continue
+    except Exception:
+        pass
+    return labeled
+
+
+def _uncertainty_score(
+    anomaly_score: float,
+    severity: str,
+    threshold: float = IF_SCORE_THRESHOLD,
+) -> float:
+    """Uncertainty sampling: threshold에 가까울수록 1에 가까움.
+
+    - decision_function threshold 근처 (|score - threshold| 작을수록 불확실)
+    - HIGH severity는 확실 (label 명확) → uncertainty 낮춤
+    - LOW/MEDIUM severity는 uncertainty 높임
+    """
+    # Distance to threshold (threshold는 음수, score도 음수 possible)
+    distance = abs(anomaly_score - threshold)
+    # exponential decay: 거리 0 → 1.0, 거리 멀수록 0
+    base = float(math.exp(-distance * 5))  # 5x scale
+
+    # Severity modifier
+    sev = severity.upper() if severity else "LOW"
+    if sev == "HIGH" or sev == "CRITICAL":
+        base *= 0.3  # HIGH는 보통 확실 → label 우선순위 낮음
+    elif sev == "LOW":
+        base *= 1.2  # LOW는 더 불확실 → 우선순위 높음
+    # MEDIUM = 1.0
+
+    return float(min(1.0, max(0.0, base)))
+
+
+@router.get("/active-learning/next", response_model=ActiveLearningQuery)
+def get_next_items_for_labeling(top_k: int = 10):
+    """분석가 라벨링 우선순위 queue (P4+ · 2026-04-15).
+
+    Strategy: uncertainty sampling v1
+    - Redis `skyops:anomaly:stream` 에서 최근 이벤트 조회
+    - 이미 labeled된 alert_id는 제외 (feedback.jsonl)
+    - uncertainty_score = f(|anomaly_score - threshold|, severity)
+    - 상위 K개 반환
+
+    Redis 미가용 시 empty list + total_pending=0 반환 (graceful degradation).
+    """
+    generated_at = datetime.now(timezone.utc).isoformat()
+    labeled = _load_labeled_alert_ids()
+
+    r = get_redis()
+    if r is None:
+        return ActiveLearningQuery(
+            items=[],
+            total_pending=0,
+            returned_count=0,
+            query_strategy="uncertainty_sampling_v1",
+            generated_at=generated_at,
+        )
+
+    try:
+        # 최근 500건 스트림 조회
+        raw_events = r.lrange(REDIS_ANOMALY_STREAM, 0, 499)
+    except Exception as e:
+        print(f"⚠️  active-learning Redis 조회 실패: {e}")
+        return ActiveLearningQuery(
+            items=[],
+            total_pending=0,
+            returned_count=0,
+            query_strategy="uncertainty_sampling_v1",
+            generated_at=generated_at,
+        )
+
+    items: list[ActiveLearningItem] = []
+    total_pending = 0
+    for raw in raw_events:
+        try:
+            evt = _json.loads(raw)
+        except _json.JSONDecodeError:
+            continue
+        alert_id = evt.get("alert_id", "")
+        if not alert_id or alert_id in labeled:
+            continue  # 이미 라벨됨 skip
+
+        total_pending += 1
+
+        # AnomalyEvent in pipeline/cep_rules.py stores `anomaly_score` / `severity` / `anomaly_type`
+        # Some older events may lack fields; fallback 안전
+        score = float(evt.get("anomaly_score", -0.15) or -0.15)
+        severity = evt.get("severity", "LOW")
+        uncertainty = _uncertainty_score(score, severity)
+
+        items.append(ActiveLearningItem(
+            alert_id=alert_id,
+            anomaly_score=score,
+            anomaly_type=evt.get("anomaly_type", "UNKNOWN"),
+            severity=severity,
+            flight_phase=evt.get("flight_phase"),
+            icao24=evt.get("icao24"),
+            callsign=evt.get("callsign"),
+            description=evt.get("description", "")[:300],
+            uncertainty_score=uncertainty,
+        ))
+
+    # 정렬 + top_k
+    items.sort(key=lambda x: x.uncertainty_score, reverse=True)
+    top = items[:max(1, top_k)]
+
+    return ActiveLearningQuery(
+        items=top,
+        total_pending=total_pending,
+        returned_count=len(top),
+        query_strategy="uncertainty_sampling_v1",
+        generated_at=generated_at,
     )
