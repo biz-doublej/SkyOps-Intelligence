@@ -60,9 +60,18 @@
 - 이착륙 구간의 정상적 고도 변화를 이상으로 오탐지
 
 **개선 방향:**
-1. 비행 단계(이륙/순항/접근/착륙)별 차등 임계값 적용
-2. 공항 반경 30NM 내 이착륙 구간 예외 처리
-3. 연속 2회 이상 감지 시에만 알림 발생 (디바운싱)
+1. ✅ **비행 단계(이륙/순항/접근/착륙)별 차등 임계값 적용 — 2026-04-14 P2 완료**
+   - `pipeline/phase_classifier.py` heuristic FlightPhase classifier (7 phases + UNKNOWN)
+   - `pipeline/cep_rules.py` PHASE_ALTITUDE/VELOCITY/PATH_MULTIPLIER 적용
+   - TAXI는 ALTITUDE/PATH rule 비활성, TAKEOFF/LANDING은 3배 관대, APPROACH는 0.5배 엄격
+2. 공항 반경 30NM 내 이착륙 구간 예외 처리 (P3 후보 — Haversine + airport DB 필요)
+3. ✅ **연속 2회 이상 감지 시에만 알림 발생 (디바운싱) — 2026-04-14 P2 완료**
+   - Redis TTL 60초 key `skyops:anomaly:debounce:{icao24}:{type}`
+   - severity=HIGH 은 debounce 면제 (critical 알림 손실 방지)
+   - LOW/MEDIUM 은 60초 내 재발생 suppress
+4. ✅ **Analyst feedback loop (stub) — 2026-04-14 P2 완료**
+   - `POST /anomaly/feedback` 엔드포인트 → `data/analyst_feedback/feedback.jsonl` append
+   - 향후 active learning 입력으로 사용
 
 ---
 
