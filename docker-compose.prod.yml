@@ -146,14 +146,29 @@ services:
       - "80:80"
       - "8080:8080"  # Traefik dashboard
 
+  # ── Jaeger (traces UI) ────────────────────────────────────────────
+  jaeger:
+    image: jaegertracing/all-in-one:1.60
+    networks: [skyops]
+    profiles: [observability]
+    environment:
+      COLLECTOR_OTLP_ENABLED: "true"
+      SPAN_STORAGE_TYPE: memory
+    ports:
+      - "16686:16686"  # Jaeger UI
+      - "14250:14250"  # gRPC (legacy)
+      # OTel collector가 4317로 받아서 포워드하므로 Jaeger는 내부 4317만
+
   # ── OTel Collector (optional) ─────────────────────────────────────
   otel-collector:
     image: otel/opentelemetry-collector-contrib:latest
     networks: [skyops]
     profiles: [observability]
+    depends_on: [jaeger]
     command: ["--config=/etc/otel-collector-config.yaml"]
     volumes:
       - ./monitoring/otel-collector-config.yaml:/etc/otel-collector-config.yaml:ro
     ports:
-      - "4317:4317"  # OTLP gRPC
+      - "4317:4317"  # OTLP gRPC (host → collector)
       - "4318:4318"  # OTLP HTTP
+      - "8889:8889"  # Prometheus metrics
