@@ -65,7 +65,19 @@
 - ✅ **P3 Dashboard README 재작성 완료 (2026-04-14)** — Prototype smell 제거, Next.js 16 특화 내용
 - ✅ **P3 Active Learning 스크립트 완료 (2026-04-14)** — `analysis/active_learning.py`로 feedback.jsonl 자동 분석 + 권고 생성
 
-**잔여 개선 과제 (P4+ 이연):**
+**잔여 개선 과제 (P5+ 이연):**
+
+### P4+ 완료 (2026-04-15)
+- ✅ **ADR-001 Phase 2**: `pyproject.toml` + editable install (`pip install -e .`), 8개 entry points
+- ✅ **ADR-002**: API Gateway 선택 MADR (Traefik v3, 6 microservices routing)
+- ✅ **ChromaDB expansion**: 13 → 95 chunks (폴더 기반 loader, FAA AIM/ICAO Annex/NOTAM samples/SOP)
+- ✅ **Conformalized Quantile Regression**: `analysis/quantile_regression.py` + `conformal_calibration.py --mode cqr`, asymmetric intervals
+- ✅ **Containerization**: Dockerfile.api/dashboard, docker-compose.prod.yml, k8s/ 7 manifests, GitHub Actions CI
+- ✅ **Active Learning query**: `/active-learning/next` endpoint + `analysis/active_learning.py next-batch` CLI
+- ✅ **ATFM/NOTAM mock producers**: schema v2.0, event_model.md 2.5/2.6 준수, docker-compose.yml topic 추가
+
+### P5+ 이연 과제
+
 1. ✅ **비행 단계(이륙/순항/접근/착륙)별 차등 임계값 적용 — 2026-04-14 P2 완료**
    - `pipeline/phase_classifier.py` heuristic FlightPhase classifier (7 phases + UNKNOWN)
    - `pipeline/cep_rules.py` PHASE_ALTITUDE/VELOCITY/PATH_MULTIPLIER 적용
