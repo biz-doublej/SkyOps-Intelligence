@@ -1,0 +1,1 @@
+{"ts": "2026-04-15T16:30:51.441009+00:00", "event": "advisory_approval", "actor": "analyst_01", "resource": "test-alert-123", "outcome": "approved", "trace_id": "", "correlation_id": "adv-456", "extra": {"decision": "approved", "reason": "smoke test", "modified": false}}
