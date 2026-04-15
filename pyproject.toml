@@ -118,6 +118,7 @@ skyops-notam-producer = "pipeline.notam_producer:main"
 skyops-feast-apply = "feature_store.apply:main"
 skyops-feast-materialize = "feature_store.materialize:main"
 skyops-iceberg-init = "feature_store.iceberg_bootstrap:main"
+skyops-schema-registry = "pipeline.schema_registry:main"
 
 [project.urls]
 Repository = "https://github.com/biz-doublej/SkyOps-Intelligence"

@@ -1,0 +1,56 @@
+{
+  "type": "record",
+  "name": "AlertDecisionEvent",
+  "namespace": "com.skyops.events.v2",
+  "doc": "Anomaly detection decision output. Aligned with docs/event_model.md 2.7.",
+  "fields": [
+    { "name": "schema_version", "type": "string", "default": "2.0" },
+    { "name": "alert_id", "type": "string", "doc": "UUID4 per alert" },
+    { "name": "correlation_id", "type": "string", "doc": "Ties alert to source event(s)" },
+    { "name": "event_timestamp", "type": { "type": "long", "logicalType": "timestamp-millis" } },
+    { "name": "ingested_at", "type": { "type": "long", "logicalType": "timestamp-millis" } },
+
+    { "name": "icao24",   "type": "string" },
+    { "name": "callsign", "type": ["null", "string"], "default": null },
+
+    { "name": "anomaly_type", "type": {
+        "type": "enum", "name": "AnomalyType",
+        "symbols": ["ALTITUDE_SPIKE", "VELOCITY_ANOMALY", "PATH_DEVIATION",
+                    "EMERGENCY_SQUAWK", "RAPID_DESCENT", "LOSS_OF_SIGNAL",
+                    "UNUSUAL_PHASE_TRANSITION", "OTHER"]
+    } },
+    { "name": "severity", "type": {
+        "type": "enum", "name": "AnomalySeverity", "symbols": ["LOW", "MEDIUM", "HIGH", "CRITICAL"]
+    } },
+
+    { "name": "anomaly_score", "type": "float", "doc": "Isolation Forest decision_function output" },
+    { "name": "if_threshold_used", "type": "float" },
+
+    { "name": "flight_phase", "type": [
+        "null",
+        { "type": "enum", "name": "FlightPhaseAlert",
+          "symbols": ["TAXI", "TAKEOFF", "CLIMB", "CRUISE", "DESCENT", "APPROACH", "LANDING", "UNKNOWN"] }
+    ], "default": null },
+    { "name": "phase_confidence", "type": ["null", "float"], "default": null },
+
+    { "name": "description",  "type": "string", "doc": "Human-readable short description" },
+    { "name": "explanation",  "type": ["null", "string"], "default": null, "doc": "LLM-generated advisory (optional)" },
+
+    { "name": "suppressed", "type": "boolean", "default": false, "doc": "True if debounced away" },
+    { "name": "suppress_reason", "type": ["null", "string"], "default": null },
+
+    { "name": "analyst_feedback", "type": [
+        "null",
+        { "type": "record", "name": "AnalystFeedback",
+          "fields": [
+            { "name": "labeled_by", "type": "string" },
+            { "name": "labeled_at", "type": { "type": "long", "logicalType": "timestamp-millis" } },
+            { "name": "label", "type": {
+                "type": "enum", "name": "FeedbackLabel",
+                "symbols": ["TRUE_POSITIVE", "FALSE_POSITIVE", "UNCERTAIN"] } },
+            { "name": "comment", "type": ["null", "string"], "default": null }
+          ]
+        }
+    ], "default": null, "doc": "Populated post-hoc via /anomaly/feedback endpoint" }
+  ]
+}

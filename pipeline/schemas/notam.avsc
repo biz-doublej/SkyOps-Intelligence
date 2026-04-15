@@ -1,0 +1,48 @@
+{
+  "type": "record",
+  "name": "NOTAMEvent",
+  "namespace": "com.skyops.events.v2",
+  "doc": "Notice to Airmen. Aligned with docs/event_model.md 2.6 and FAA AIXM 5.1 + event: namespace.",
+  "fields": [
+    { "name": "schema_version", "type": "string", "default": "2.0" },
+    { "name": "event_id", "type": "string" },
+    { "name": "event_timestamp", "type": { "type": "long", "logicalType": "timestamp-millis" } },
+    { "name": "ingested_at", "type": { "type": "long", "logicalType": "timestamp-millis" } },
+    { "name": "source", "type": {
+        "type": "enum", "name": "NotamSource",
+        "symbols": ["FAA_SWIM", "EUROCONTROL_EAD", "KAC_NEADS", "ICAO_AIXM", "MOCK"]
+    } },
+
+    { "name": "notam_number", "type": "string", "doc": "FAA format e.g. 'A0123/24' or ICAO 'A1234/24'" },
+    { "name": "notam_class", "type": [
+        "null",
+        { "type": "enum", "name": "NotamClass",
+          "symbols": ["AERODROME", "NAV", "COM", "OBSTACLE", "ROUTE", "AIRSPACE", "OPS", "OTHER", "UNKNOWN"] }
+    ], "default": null },
+    { "name": "selection_code", "type": ["null", "string"], "default": null,
+      "doc": "FAA Q-code, e.g. 'QNDAS' = NAV unserviceable" },
+
+    { "name": "location_icao", "type": ["null", "string"], "default": null, "doc": "Primary ICAO airport" },
+    { "name": "fir_icao",      "type": ["null", "string"], "default": null, "doc": "Flight Information Region" },
+    { "name": "latitude",      "type": ["null", "double"], "default": null },
+    { "name": "longitude",     "type": ["null", "double"], "default": null },
+    { "name": "radius_nm",     "type": ["null", "float"],  "default": null },
+
+    { "name": "effective_start", "type": ["null", { "type": "long", "logicalType": "timestamp-millis" }], "default": null },
+    { "name": "effective_end",   "type": ["null", { "type": "long", "logicalType": "timestamp-millis" }], "default": null },
+    { "name": "permanent", "type": "boolean", "default": false },
+
+    { "name": "text_raw", "type": "string", "doc": "NOTAM E field (raw)" },
+    { "name": "text_english", "type": ["null", "string"], "default": null, "doc": "Translated/paraphrased" },
+    { "name": "text_korean",  "type": ["null", "string"], "default": null },
+
+    { "name": "altitude_lower_ft", "type": ["null", "int"], "default": null },
+    { "name": "altitude_upper_ft", "type": ["null", "int"], "default": null },
+
+    { "name": "severity", "type": [
+        "null",
+        { "type": "enum", "name": "NotamSeverity", "symbols": ["INFO", "ADVISORY", "WARNING", "CRITICAL"] }
+    ], "default": null,
+      "doc": "Derived from Q-code + class. CRITICAL: runway closure, ILS total outage." }
+  ]
+}

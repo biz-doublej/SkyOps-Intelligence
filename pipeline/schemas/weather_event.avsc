@@ -1,0 +1,36 @@
+{
+  "type": "record",
+  "name": "WeatherEvent",
+  "namespace": "com.skyops.events.v2",
+  "doc": "METAR/TAF observation or forecast at an airport. One event per observation.",
+  "fields": [
+    { "name": "schema_version", "type": "string", "default": "2.0" },
+    { "name": "event_id", "type": "string" },
+    { "name": "event_timestamp", "type": { "type": "long", "logicalType": "timestamp-millis" } },
+    { "name": "ingested_at", "type": { "type": "long", "logicalType": "timestamp-millis" } },
+    { "name": "source", "type": {
+        "type": "enum", "name": "WeatherSource", "symbols": ["NOAA", "KMA", "EUROCONTROL_OPMET", "ICAO_SADIS"]
+    } },
+
+    { "name": "station_icao", "type": "string",  "doc": "4-letter ICAO airport code" },
+    { "name": "type", "type": {
+        "type": "enum", "name": "WeatherReportType", "symbols": ["METAR", "SPECI", "TAF"]
+    } },
+
+    { "name": "raw_text", "type": "string", "doc": "Unmodified METAR/TAF string" },
+
+    { "name": "temperature_c",   "type": ["null", "float"], "default": null },
+    { "name": "dewpoint_c",      "type": ["null", "float"], "default": null },
+    { "name": "wind_direction",  "type": ["null", "int"],   "default": null, "doc": "degrees true" },
+    { "name": "wind_speed_knots","type": ["null", "int"],   "default": null },
+    { "name": "wind_gust_knots", "type": ["null", "int"],   "default": null },
+    { "name": "visibility_sm",   "type": ["null", "float"], "default": null, "doc": "statute miles" },
+    { "name": "ceiling_feet",    "type": ["null", "int"],   "default": null, "doc": "feet AGL" },
+    { "name": "altimeter_inhg",  "type": ["null", "float"], "default": null },
+
+    { "name": "flight_category", "type": [
+        "null",
+        { "type": "enum", "name": "FlightCategory", "symbols": ["VFR", "MVFR", "IFR", "LIFR", "UNKNOWN"] }
+    ], "default": null, "doc": "Derived: VFR = 3sm+ vis AND 1000ft+ ceiling; LIFR = <1sm or <500ft" }
+  ]
+}

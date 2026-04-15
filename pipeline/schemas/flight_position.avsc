@@ -1,0 +1,38 @@
+{
+  "type": "record",
+  "name": "FlightPositionEvent",
+  "namespace": "com.skyops.events.v2",
+  "doc": "ADS-B position snapshot (from OpenSky or FAA SWIM SFDPS). One event per aircraft per polling tick.",
+  "fields": [
+    { "name": "schema_version", "type": "string", "default": "2.0" },
+    { "name": "event_id",       "type": "string",  "doc": "UUID4 per event" },
+    { "name": "event_timestamp", "type": { "type": "long", "logicalType": "timestamp-millis" } },
+    { "name": "ingested_at",    "type": { "type": "long", "logicalType": "timestamp-millis" } },
+    { "name": "source",         "type": {
+        "type": "enum", "name": "PositionSource", "symbols": ["OPENSKY", "SWIM_SFDPS", "ADSB_EXCHANGE", "FLIGHTAWARE"]
+    } },
+
+    { "name": "icao24",    "type": "string",                         "doc": "Mode-S hex (6 chars)" },
+    { "name": "callsign",  "type": ["null", "string"], "default": null },
+    { "name": "tail_number", "type": ["null", "string"], "default": null },
+
+    { "name": "longitude",     "type": ["null", "double"], "default": null },
+    { "name": "latitude",      "type": ["null", "double"], "default": null },
+    { "name": "baro_altitude", "type": ["null", "float"],  "default": null, "doc": "feet" },
+    { "name": "geo_altitude",  "type": ["null", "float"],  "default": null, "doc": "feet" },
+    { "name": "velocity",      "type": ["null", "float"],  "default": null, "doc": "knots ground speed" },
+    { "name": "heading",       "type": ["null", "float"],  "default": null, "doc": "degrees true" },
+    { "name": "vertical_rate", "type": ["null", "float"],  "default": null, "doc": "feet per minute" },
+
+    { "name": "on_ground",       "type": "boolean", "default": false },
+    { "name": "squawk",          "type": ["null", "string"], "default": null, "doc": "4-digit octal transponder code" },
+    { "name": "emergency",       "type": ["null", "boolean"], "default": null },
+
+    { "name": "flight_phase", "type": [
+        "null",
+        { "type": "enum", "name": "FlightPhase",
+          "symbols": ["TAXI", "TAKEOFF", "CLIMB", "CRUISE", "DESCENT", "APPROACH", "LANDING", "UNKNOWN"] }
+    ], "default": null, "doc": "Populated by pipeline/flink_processor.py" },
+    { "name": "phase_confidence", "type": ["null", "float"], "default": null }
+  ]
+}

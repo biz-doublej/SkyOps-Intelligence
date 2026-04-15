@@ -1,0 +1,44 @@
+{
+  "type": "record",
+  "name": "ATFMRestrictionEvent",
+  "namespace": "com.skyops.events.v2",
+  "doc": "Air Traffic Flow Management restriction (GDP, ground stop, rerouting). Aligned with docs/event_model.md 2.5.",
+  "fields": [
+    { "name": "schema_version", "type": "string", "default": "2.0" },
+    { "name": "event_id", "type": "string" },
+    { "name": "event_timestamp", "type": { "type": "long", "logicalType": "timestamp-millis" } },
+    { "name": "ingested_at", "type": { "type": "long", "logicalType": "timestamp-millis" } },
+    { "name": "source", "type": {
+        "type": "enum", "name": "AtfmSource",
+        "symbols": ["FAA_ATCSCC", "EUROCONTROL_NM_B2B", "KAC_ATFM", "CAAC_ATMB", "MOCK"]
+    } },
+
+    { "name": "restriction_type", "type": {
+        "type": "enum", "name": "RestrictionType",
+        "symbols": ["GDP", "GROUND_STOP", "DEPARTURE_SLOT", "REROUTING", "SPEED_RESTRICTION",
+                    "ALTITUDE_RESTRICTION", "CLOSURE", "MIT", "OTHER"]
+    } },
+
+    { "name": "scope_type", "type": {
+        "type": "enum", "name": "ScopeType",
+        "symbols": ["AIRPORT", "FIR", "SECTOR", "ROUTE", "REGION"]
+    } },
+    { "name": "scope_ids", "type": { "type": "array", "items": "string" }, "doc": "ICAO codes or FIR/sector IDs" },
+
+    { "name": "reason", "type": [
+        "null",
+        { "type": "enum", "name": "RestrictionReason",
+          "symbols": ["WEATHER", "VOLUME", "EQUIPMENT", "RUNWAY", "STAFFING", "SECURITY", "OTHER", "UNKNOWN"] }
+    ], "default": null },
+    { "name": "reason_text", "type": ["null", "string"], "default": null },
+
+    { "name": "effective_start", "type": { "type": "long", "logicalType": "timestamp-millis" } },
+    { "name": "effective_end",   "type": ["null", { "type": "long", "logicalType": "timestamp-millis" }], "default": null },
+
+    { "name": "expected_delay_min", "type": ["null", "int"], "default": null },
+    { "name": "affected_flights_est", "type": ["null", "int"], "default": null },
+
+    { "name": "cdm_reroute", "type": ["null", "string"], "default": null,
+      "doc": "FAA-style reroute string e.g. 'ATL..MLU..IAH' " }
+  ]
+}
