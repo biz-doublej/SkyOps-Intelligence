@@ -22,6 +22,7 @@ volumes:
   zookeeper-data:
   prometheus-data:
   grafana-data:
+  marquez-db-data:
 
 services:
   # ── Infrastructure ─────────────────────────────────────────────────
@@ -212,3 +213,35 @@ services:
       - grafana-data:/var/lib/grafana
     ports:
       - "3001:3000"  # Grafana on host:3001 (dashboard 3000 충돌 회피)
+
+  # ── Marquez (P7-B · OpenLineage backend) ──────────────────────────
+  # Activate:  docker compose -f docker-compose.prod.yml --profile lineage up -d
+  marquez-db:
+    image: postgres:15-alpine
+    networks: [skyops]
+    profiles: [lineage]
+    environment:
+      POSTGRES_USER: marquez
+      POSTGRES_PASSWORD: marquez
+      POSTGRES_DB: marquez
+    volumes:
+      - marquez-db-data:/var/lib/postgresql/data
+
+  marquez:
+    image: marquezproject/marquez:0.50.0
+    networks: [skyops]
+    profiles: [lineage]
+    depends_on: [marquez-db]
+    environment:
+      MARQUEZ_DB_HOST: marquez-db
+      MARQUEZ_DB_USER: marquez
+      MARQUEZ_DB_PASSWORD: marquez
+      MARQUEZ_DB_NAME: marquez
+    ports:
+      - "5000:5000"   # OpenLineage API
+      - "5001:5001"   # admin
+    healthcheck:
+      test: ["CMD", "wget", "-qO-", "http://localhost:5001/healthcheck"]
+      interval: 30s
+      timeout: 5s
+      retries: 5

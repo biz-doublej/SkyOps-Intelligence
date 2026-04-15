@@ -37,6 +37,15 @@ def _iceberg_health() -> dict:
         return {"enabled": False, "loaded": False, "warehouse": None, "namespace": None}
 
 
+def _lineage_health() -> dict:
+    """Attempt lineage_health() without hard dependency on openlineage-python."""
+    try:
+        from monitoring.lineage import lineage_health  # type: ignore
+        return lineage_health()
+    except Exception:  # noqa: BLE001
+        return {"enabled": False, "client_loaded": False, "url": None, "namespace": "skyops"}
+
+
 @router.get("/health")
 def health():
     return {
@@ -50,4 +59,5 @@ def health():
         "vllm_url": VLLM_BASE_URL,
         "feast": _feast_health(),         # P6-A (2026-04-15)
         "iceberg": _iceberg_health(),     # P7-A (2026-04-15)
+        "lineage": _lineage_health(),     # P7-B (2026-04-15)
     }

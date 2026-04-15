@@ -313,6 +313,22 @@ def train_final_model(
     # Windows local paths should be passed as file:// URIs for MLflow.
     mlflow.set_tracking_uri((PROJECT_ROOT / "mlruns").as_uri())
     mlflow.set_experiment("SkyOps-XGBoost")
+
+    # P7-B: OpenLineage START — emit before MLflow run for clear ordering
+    ol_run_id = None
+    try:
+        import sys as _sys
+        _sys.path.insert(0, str(PROJECT_ROOT))
+        from monitoring.lineage import (  # type: ignore
+            emit_train_run_start, emit_train_run_complete,
+        )
+        ol_run_id = emit_train_run_start(
+            job_name="xgboost_delay_train",
+            inputs=[("skyops.silver_flight_features", None)],
+        )
+    except Exception:
+        emit_train_run_complete = None  # type: ignore
+
     with mlflow.start_run(run_name="XGBoost_Optuna_TimeSeriesCV"):
         mlflow.log_params(best_params)
         mlflow.log_params({"fit_sec": fit_sec})
@@ -325,6 +341,24 @@ def train_final_model(
                     mlflow.log_metric(f"{pfx}_{k}", v)
         mlflow.xgboost.log_model(model, artifact_path="xgboost_model")
     print("   📊 MLflow 로깅 완료")
+
+    # P7-B: OpenLineage COMPLETE
+    if ol_run_id and emit_train_run_complete is not None:
+        try:
+            metrics_for_ol = {
+                "val_rmse": float(val_m.get("rmse", 0)),
+                "test_rmse": float(test_m.get("rmse", 0)),
+                "test_r2": float(test_m.get("r2", 0)),
+            }
+            emit_train_run_complete(
+                run_id=ol_run_id,
+                job_name="xgboost_delay_train",
+                outputs=[("skyops.gold_inference_log", None)],
+                model_version="2.1.1",
+                metrics=metrics_for_ol,
+            )
+        except Exception:
+            pass
 
     # 모델 저장
     model_path = MODELS_DIR / "xgboost_best.pkl"

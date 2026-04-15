@@ -94,6 +94,11 @@ iceberg = [
     "pyarrow>=17.0.0",
 ]
 
+# P7-B · OpenLineage (dataset ↔ model lineage)
+lineage = [
+    "openlineage-python>=1.18.0",
+]
+
 # Development
 dev = [
     "pytest>=8.0.0",
@@ -103,7 +108,7 @@ dev = [
 
 # All-in-one (CI/CD 편의)
 all = [
-    "skyops-intelligence[serving,otel,pipeline,ml,rag,eval,feast,schema,iceberg]",
+    "skyops-intelligence[serving,otel,pipeline,ml,rag,eval,feast,schema,iceberg,lineage]",
 ]
 
 [project.scripts]
