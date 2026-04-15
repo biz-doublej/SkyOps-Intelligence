@@ -1,0 +1,45 @@
+# SkyOps Intelligence — Feast Feature Store (P6-A · 2026-04-15)
+# ============================================================================
+# Strategic Review 병목 #6: "training-serving skew를 막으려면 Feature Store".
+# Point-in-time correct join 강제 + offline(parquet)↔online(redis) 동일 정의.
+#
+# Apply:
+#   cd feature_store
+#   feast apply
+#
+# Materialize to online store (latest snapshot → Redis):
+#   feast materialize-incremental $(date -u +%Y-%m-%dT%H:%M:%S)
+#
+# Get online features for serving:
+#   from feast import FeatureStore
+#   fs = FeatureStore(repo_path="feature_store")
+#   features = fs.get_online_features(
+#       features=["flight_rotation:rotation_depth", "flight_rotation:prev_leg_arr_delay_min"],
+#       entity_rows=[{"tail_number": "N12345"}],
+#   ).to_dict()
+
+project: skyops_intelligence
+provider: local
+registry:
+  registry_type: file
+  path: ../data/feast/registry.db
+
+# Offline store: parquet on local disk (dev).
+# Prod 이전 시 BigQuery / Snowflake / Athena 로 교체.
+offline_store:
+  type: file
+
+# Online store: Redis (P5+에서 이미 운영 중인 Redis 재활용).
+# - REDIS_HOST/PORT 는 .env 와 동기화 (serving/common/constants.py 참조)
+# - DB 1번을 Feast 전용으로 분리 (aircraft stream 과 격리)
+online_store:
+  type: redis
+  connection_string: "localhost:6379,db=1"
+
+# Entity key (serialization) — protobuf v2 권장
+entity_key_serialization_version: 2
+
+# Feature Server 옵션 (Kubernetes 배포 시 사용)
+feature_server:
+  enabled: false
+  type: local

@@ -1,6 +1,7 @@
 """Gateway router — /health and top-level system endpoints.
 
 ADR-001 Migration Phase 1 (2026-04-14 P3).
+P6-A (2026-04-15): Feast health wiring.
 """
 
 from __future__ import annotations
@@ -18,6 +19,15 @@ from common.constants import (
 router = APIRouter(tags=["system"])
 
 
+def _feast_health() -> dict:
+    """Attempt feast_health() without hard dependency on the Feast install."""
+    try:
+        from feature_store.client import feast_health  # type: ignore
+        return feast_health()
+    except Exception:  # noqa: BLE001
+        return {"enabled": False, "loaded": False, "repo_path": None}
+
+
 @router.get("/health")
 def health():
     return {
@@ -29,4 +39,5 @@ def health():
             "conformal": CONFORMAL_PATH.exists(),  # P1 (2026-04-14)
         },
         "vllm_url": VLLM_BASE_URL,
+        "feast": _feast_health(),  # P6-A (2026-04-15)
     }

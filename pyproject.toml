@@ -77,6 +77,23 @@ eval = [
     "rouge-score>=0.1.2",
 ]
 
+# P6-A · Feast Feature Store (offline=parquet, online=redis)
+feast = [
+    "feast[redis]>=0.40.0",
+]
+
+# P6-B · Schema Registry + Avro (Confluent)
+schema = [
+    "confluent-kafka[avro,schemaregistry]>=2.5.0",
+    "fastavro>=1.9.0",
+]
+
+# P6-D · Apache Iceberg (Bronze/Silver/Gold)
+iceberg = [
+    "pyiceberg>=0.7.0",
+    "pyarrow>=17.0.0",
+]
+
 # Development
 dev = [
     "pytest>=8.0.0",
@@ -86,7 +103,7 @@ dev = [
 
 # All-in-one (CI/CD 편의)
 all = [
-    "skyops-intelligence[serving,otel,pipeline,ml,rag,eval]",
+    "skyops-intelligence[serving,otel,pipeline,ml,rag,eval,feast,schema,iceberg]",
 ]
 
 [project.scripts]
@@ -98,6 +115,9 @@ skyops-active-learning = "analysis.active_learning:main"
 skyops-ragas-bench = "evaluation.ragas_bench:main"
 skyops-atfm-producer = "pipeline.atfm_producer:main"
 skyops-notam-producer = "pipeline.notam_producer:main"
+skyops-feast-apply = "feature_store.apply:main"
+skyops-feast-materialize = "feature_store.materialize:main"
+skyops-iceberg-init = "feature_store.iceberg_bootstrap:main"
 
 [project.urls]
 Repository = "https://github.com/biz-doublej/SkyOps-Intelligence"
@@ -106,7 +126,7 @@ Documentation = "https://github.com/biz-doublej/SkyOps-Intelligence/tree/dev/doc
 # ── Package discovery ─────────────────────────────────────────────────
 [tool.setuptools.packages.find]
 where = ["."]
-include = ["serving*", "pipeline*", "analysis*", "evaluation*"]
+include = ["serving*", "pipeline*", "analysis*", "evaluation*", "feature_store*"]
 exclude = [
     "tests*",
     "llm_venv*",
