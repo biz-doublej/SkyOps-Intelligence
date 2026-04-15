@@ -52,8 +52,15 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
 WORKDIR /app
 
 COPY --from=builder /build/dist/*.whl /tmp/
-RUN pip install /tmp/*.whl[serving,otel,pipeline,rag] \
- && rm /tmp/*.whl
+# shell glob + pip extras 가 섞이면 character class 로 오해됨 — 실제 파일명 해석 후 설치
+RUN set -e \
+ && WHEEL=$(ls /tmp/skyops_intelligence-*.whl 2>/dev/null | head -1) \
+ && if [ -z "$WHEEL" ]; then \
+        echo "❌ ERROR: wheel not found in /tmp/"; ls -la /tmp/; exit 1; \
+    fi \
+ && echo "📦 Installing wheel: $WHEEL" \
+ && pip install --no-cache-dir "${WHEEL}[serving,otel,pipeline,rag]" \
+ && rm -f /tmp/*.whl
 
 # Non-packaged runtime scripts (numbered files are tricky to include in wheel)
 COPY serving/05_rag_chain.py /app/serving/
