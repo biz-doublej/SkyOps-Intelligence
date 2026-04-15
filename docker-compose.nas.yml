@@ -158,7 +158,7 @@ services:
     depends_on: [prometheus]
     environment:
       GF_SECURITY_ADMIN_USER: admin
-      GF_SECURITY_ADMIN_PASSWORD: skyops
+      GF_SECURITY_ADMIN_PASSWORD: ${GRAFANA_ADMIN_PASSWORD:-skyops}
       GF_USERS_ALLOW_SIGN_UP: "false"
       GF_AUTH_ANONYMOUS_ENABLED: "true"
       GF_AUTH_ANONYMOUS_ORG_ROLE: Viewer
@@ -175,3 +175,25 @@ services:
       - "3001:3000"
     mem_limit: 250m
     cpus: 0.3
+
+  # ── Cloudflare Tunnel (외부 HTTPS 노출, P8-NAS) ────────────────────
+  # Activate: docker compose -f docker-compose.nas.yml --profile public up -d
+  # Prerequisite: Cloudflare Zero Trust → Networks → Tunnels → Create tunnel → token 복사
+  #               .env.nas 에 CLOUDFLARE_TUNNEL_TOKEN=eyJ... 로 저장
+  # Public hostname 매핑 (Cloudflare dashboard 에서 설정):
+  #   skyops.your-domain.com     → http://dashboard:3000
+  #   api.skyops.your-domain.com → http://api:8000  (옵션, access control 권장)
+  cloudflared:
+    image: cloudflare/cloudflared:latest
+    container_name: skyops-cloudflared
+    restart: unless-stopped
+    profiles: [public]
+    networks: [skyops-nas]
+    depends_on:
+      - dashboard
+      - api
+    command: tunnel --no-autoupdate run
+    environment:
+      - TUNNEL_TOKEN=${CLOUDFLARE_TUNNEL_TOKEN}
+    mem_limit: 128m
+    cpus: 0.2

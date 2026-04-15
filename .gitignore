@@ -105,3 +105,7 @@ mlruns/
 # ── P7-D · Generated Korean SFT/DPO data (regenerable from script) ──
 data/alpaca/korean_aviation_sft.jsonl
 data/alpaca/korean_aviation_dpo.jsonl
+
+# ── P8 · NAS deployment secrets ─────────────────────────────────────
+.env.nas
+data/audit/*.jsonl
