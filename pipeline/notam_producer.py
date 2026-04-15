@@ -117,6 +117,13 @@ MOCK_NOTAMS = [
 
 
 def make_kafka_producer():
+    # P8-B: try AvroProducer (Schema Registry) first; graceful JSON fallback
+    try:
+        from pipeline.avro_producer import build_producer
+        return build_producer(topic=TOPIC)
+    except Exception as e:  # noqa: BLE001
+        logger.warning("Avro producer init failed (%s) — fallback to plain JSON", e)
+
     try:
         from kafka import KafkaProducer
     except ImportError:
