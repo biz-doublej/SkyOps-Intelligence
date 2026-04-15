@@ -94,7 +94,17 @@
 - ✅ **Dashboard NOTAM 실시간 뷰**: `dashboard/src/app/notam/page.tsx` + `useNotamFeed` hook + WebSocket `/ws/notams`. 4 severity 카운터, ICAO/severity 필터, top-8 공항별 분포, Korean-first 텍스트 + Q-code badge. `serving/routers/streaming.py`에 `/notam/recent`, `/notam/stats` endpoint 추가. notam_producer + swim_subscriber가 Redis fanout. API_VERSION 2.1.1.
 - ✅ **Engineering Package**: `Makefile` + `tasks.py` (cross-platform Python runner). 30개 target — setup/data/p6-stack/test/docker/streaming/al/eval/cleanup. `make swim-trust` 또는 `python tasks.py` 한 번으로 모든 워크플로 실행.
 
-### P6 이연 → P7 후보 과제
+### P7 완료 (2026-04-15)
+- ✅ **Iceberg writers** (P7-A): `feature_store/iceberg_writer.py` — IcebergWriter 클래스 + write_bronze_event / write_silver_features / write_gold_inference_log / write_gold_anomaly_decision. notam_producer + swim_subscriber가 Bronze tier 에 자동 append. serving `/predict/delay` 가 Gold inference log 에 비동기 append (lineage 보존). `/health` 에 iceberg 블록 추가.
+- ✅ **OpenLineage + Marquez** (P7-B): `monitoring/lineage.py` — emit_train_run_start / emit_train_run_complete. `analysis/xgboost_model.py` MLflow run 양 옆에 START/COMPLETE 이벤트 emit. dataset URI: `skyops.silver_flight_features` → `skyops.gold_inference_log`. `docker-compose.prod.yml --profile lineage` 에 marquez:0.50.0 + postgres 추가. 병목 #5 lineage operational follow-through.
+- ✅ **Active Learning Bandit v2** (P7-C): `/active-learning/next?strategy=bandit_v2` — Thompson sampling on Beta(1+TP, 1+FP) per anomaly_type + (anomaly_type, flight_phase) 라운드로빈 다양성. v1 (uncertainty) 도 default로 유지 (backward compat).
+- ✅ **Korean LLM SFT/DPO 시드** (P7-D): `llm_data/generate_korean_aviation_corpus.py` — 5 카테고리 (ATC 교신/약어/NOTAM/RKSI 시나리오/항공법) → 3000 SFT + 500 DPO pairs. Qwen2.5 한국어 코드스위칭/공손어 누락 failure mode 를 rejected 샘플로. **실제 retrain은 GPU 필요 (out-of-scope)**.
+- ✅ **KAC ACDM 공공데이터 client** (P7-E): `pipeline/kac_acdm_client.py` — fetch_recent_delays + derive_restrictions_from_delays (avg delay > 30min → GDP heuristic). `ATFM_MODE=kac` dispatch. KAC_API_KEY 미설정 시 graceful mock fallback. EUROCONTROL B2B 대안.
+- ✅ **k8s 프로덕션 강화** (P7-F): `k8s/rollouts/api-rollout.yaml` (Argo Rollouts 4-step canary 5%→25%→50%→100% with Prometheus AnalysisTemplates), `k8s/security/namespace-psa.yaml` (Pod Security restricted), `k8s/security/network-policies.yaml` (default-deny + 4 allow rules), `.github/workflows/ci.yml` Trivy CRITICAL/HIGH scan.
+- ✅ **ADR-003 Multi-region** (P7-G): `docs/adr/ADR-003-multi-region-deployment.md` — 4 옵션 비교, hybrid (KR primary write + EU/US read replica) 채택. GDPR/PIPA/ITAR data residency 고려. 5-phase migration plan, region별 SLO 정의. Status: Proposed (사용자 SaaS 출시 시점 review).
+- ✅ **Reproduction Guide v2** (P7-H): `docs/reproduction_guide.md` 419 → 564 라인. 아키텍처 다이어그램 v2 (Iceberg + Feast + Schema Registry + Marquez + 7 dashboard pages), v1→v2 비교 표 10 rows, P6/P7 stack quickstart + 프로덕션 k8s 절차 추가, troubleshooting 5종 추가.
+
+### P7 이연 → P8 후보 과제
 
 1. ✅ **비행 단계(이륙/순항/접근/착륙)별 차등 임계값 적용 — 2026-04-14 P2 완료**
    - `pipeline/phase_classifier.py` heuristic FlightPhase classifier (7 phases + UNKNOWN)
