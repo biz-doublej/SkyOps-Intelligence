@@ -127,11 +127,14 @@ services:
       retries: 3
       start_period: 60s
 
-  # ── Prometheus (7d retention) ─────────────────────────────────────
+  # ── Prometheus (7d retention) — monitoring profile ────────────────
+  # Activate: docker compose -f docker-compose.nas.yml --profile monitoring up -d
+  # Skip by default on low-RAM NAS (1.7GB 는 부족 — swap 사용 불가피)
   prometheus:
     image: prom/prometheus:v2.55.0
     container_name: skyops-prom-nas
     restart: unless-stopped
+    profiles: [monitoring]
     networks: [skyops-nas]
     volumes:
       - ./monitoring/prometheus/prometheus.yml:/etc/prometheus/prometheus.yml:ro
@@ -149,11 +152,12 @@ services:
     mem_limit: 300m
     cpus: 0.3
 
-  # ── Grafana (with auto-provisioned SLO dashboard) ─────────────────
+  # ── Grafana (with auto-provisioned SLO dashboard) — monitoring profile ─
   grafana:
     image: grafana/grafana:11.3.0
     container_name: skyops-grafana-nas
     restart: unless-stopped
+    profiles: [monitoring]
     networks: [skyops-nas]
     depends_on: [prometheus]
     environment:
