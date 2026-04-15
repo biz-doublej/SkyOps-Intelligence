@@ -1,0 +1,39 @@
+{
+  "timestamp": "2026-04-15T16:45:20.768811+00:00",
+  "service": "skyops-delay-model",
+  "severity": "CRITICAL",
+  "title": "Feature drift detected (4 columns)",
+  "drifted_columns": [
+    "dep_hour",
+    "distance_miles",
+    "prev_dep_delay_min",
+    "origin_hourly_departures"
+  ],
+  "psi_threshold": 0.2,
+  "action_recommended": [
+    "Check recent data source changes (ATFM schedule / fleet)",
+    "Run `make al-report` to see analyst feedback trend",
+    "Consider triggering `analysis/xgboost_model.py --trials 30` retrain",
+    "If CRITICAL: pause canary rollout, revert to stable model"
+  ],
+  "runbook": "docs/runbooks/model_retrain.md",
+  "slack_payload": {
+    "text": ":warning: *SkyOps drift alert* (CRITICAL)",
+    "blocks": [
+      {
+        "type": "section",
+        "text": {
+          "type": "mrkdwn",
+          "text": "*4 features drifted*: dep_hour, distance_miles, prev_dep_delay_min, origin_hourly_departures"
+        }
+      },
+      {
+        "type": "section",
+        "text": {
+          "type": "mrkdwn",
+          "text": "Runbook: <https://github.com/biz-doublej/SkyOps-Intelligence/blob/dev/docs/runbooks/model_retrain.md|model_retrain.md>"
+        }
+      }
+    ]
+  }
+}

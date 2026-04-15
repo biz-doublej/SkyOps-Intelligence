@@ -1,0 +1,42 @@
+{
+  "metrics": [
+    {
+      "column": "dep_hour",
+      "psi": 0.22771458585452814,
+      "drift": true
+    },
+    {
+      "column": "distance_miles",
+      "psi": 0.5577712783520553,
+      "drift": true
+    },
+    {
+      "column": "prev_dep_delay_min",
+      "psi": 0.41728320622286597,
+      "drift": true
+    },
+    {
+      "column": "origin_hourly_departures",
+      "psi": 0.5977840538736929,
+      "drift": true
+    },
+    {
+      "column": "carrier_hist_delay",
+      "psi": 0.11816120610776759,
+      "drift": false
+    },
+    {
+      "column": "rotation_depth",
+      "psi": 0.005567633488730466,
+      "drift": false
+    },
+    {
+      "column": "is_weekend",
+      "psi": 0.0006362667788845101,
+      "drift": false
+    }
+  ],
+  "dataset_drift": true,
+  "drift_share": 0.5714285714285714,
+  "method": "naive_psi_fallback"
+}
