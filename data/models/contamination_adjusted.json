@@ -1,0 +1,91 @@
+{
+  "updated_at": "2026-04-15T13:36:00.695957+00:00",
+  "baseline": {
+    "TAXI": 0.02,
+    "TAKEOFF": 0.03,
+    "CLIMB": 0.04,
+    "CRUISE": 0.05,
+    "DESCENT": 0.04,
+    "APPROACH": 0.06,
+    "LANDING": 0.06
+  },
+  "decisions": {
+    "TAXI": {
+      "baseline": 0.02,
+      "adjusted": 0.02,
+      "delta": 0.0,
+      "fp_rate": null,
+      "tp": 0,
+      "fp": 0,
+      "uncertain": 0,
+      "total_feedback": 0,
+      "reason": "insufficient_feedback"
+    },
+    "TAKEOFF": {
+      "baseline": 0.03,
+      "adjusted": 0.03,
+      "delta": 0.0,
+      "fp_rate": null,
+      "tp": 0,
+      "fp": 0,
+      "uncertain": 0,
+      "total_feedback": 0,
+      "reason": "insufficient_feedback"
+    },
+    "CLIMB": {
+      "baseline": 0.04,
+      "adjusted": 0.04,
+      "delta": 0.0,
+      "fp_rate": null,
+      "tp": 0,
+      "fp": 0,
+      "uncertain": 0,
+      "total_feedback": 0,
+      "reason": "insufficient_feedback"
+    },
+    "CRUISE": {
+      "baseline": 0.05,
+      "adjusted": 0.05,
+      "delta": 0.0,
+      "fp_rate": null,
+      "tp": 0,
+      "fp": 0,
+      "uncertain": 0,
+      "total_feedback": 0,
+      "reason": "insufficient_feedback"
+    },
+    "DESCENT": {
+      "baseline": 0.04,
+      "adjusted": 0.04,
+      "delta": 0.0,
+      "fp_rate": null,
+      "tp": 0,
+      "fp": 0,
+      "uncertain": 0,
+      "total_feedback": 0,
+      "reason": "insufficient_feedback"
+    },
+    "APPROACH": {
+      "baseline": 0.06,
+      "adjusted": 0.06,
+      "delta": 0.0,
+      "fp_rate": null,
+      "tp": 0,
+      "fp": 0,
+      "uncertain": 0,
+      "total_feedback": 0,
+      "reason": "insufficient_feedback"
+    },
+    "LANDING": {
+      "baseline": 0.06,
+      "adjusted": 0.06,
+      "delta": 0.0,
+      "fp_rate": null,
+      "tp": 0,
+      "fp": 0,
+      "uncertain": 0,
+      "total_feedback": 0,
+      "reason": "insufficient_feedback"
+    }
+  }
+}
