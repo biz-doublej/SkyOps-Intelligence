@@ -115,3 +115,37 @@ export interface HealthResponse {
   prometheus: boolean;
   vllm_url: string;
 }
+
+// ── P6-G · NOTAM live feed ────────────────────────────────────────
+export type NotamSeverity = "INFO" | "ADVISORY" | "WARNING" | "CRITICAL";
+
+export interface NotamItem {
+  notam_number: string;
+  notam_class: string | null;
+  selection_code?: string | null;
+  location_icao: string | null;
+  fir_icao?: string | null;
+  text_raw: string;
+  text_english?: string | null;
+  text_korean?: string | null;
+  effective_start?: string | null;
+  effective_end?: string | null;
+  severity: NotamSeverity;
+  _mock?: boolean;
+}
+
+export interface NotamAirportStat {
+  airport: string;
+  count: number;
+  critical: number;
+  warning: number;
+  advisory: number;
+  info: number;
+}
+
+export interface NotamStats {
+  total: number;
+  by_airport: NotamAirportStat[];
+  by_class: Record<string, number>;
+  by_severity: Record<string, number>;
+}

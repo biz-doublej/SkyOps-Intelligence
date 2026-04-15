@@ -63,6 +63,7 @@ REDIS_AIRCRAFT_STATE = "skyops:aircraft:state:{}"
 REDIS_AIRCRAFT_PHASE = "skyops:aircraft:phase:{}"          # P2 (2026-04-14)
 REDIS_ANOMALY_STREAM = "skyops:anomaly:stream"
 REDIS_ANOMALY_DEBOUNCE = "skyops:anomaly:debounce:{}:{}"   # P2 (2026-04-14)
+REDIS_NOTAM_STREAM = "skyops:notam:stream"                 # P6-G (2026-04-15)
 
 # Version
-API_VERSION = "2.0.0"  # P3 ADR-001 Phase 1 완료
+API_VERSION = "2.1.1"  # P6 (2026-04-15) — feast + notam endpoint

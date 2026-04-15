@@ -348,6 +348,13 @@ def main():
             except Exception as e:
                 logger.error(f"Kafka send error: {e}")
 
+            # P6-G: dashboard fanout — best-effort, never blocks Kafka path
+            try:
+                from pipeline.notam_producer import _publish_to_redis  # type: ignore
+                _publish_to_redis(event)
+            except Exception:
+                pass
+
             if count_received % 10 == 0:
                 logger.info(
                     f"📊 received={count_received} published={count_published} "

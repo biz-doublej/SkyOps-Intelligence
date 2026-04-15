@@ -135,6 +135,67 @@ def make_kafka_producer():
     return producer
 
 
+# P6-G: also LPUSH to Redis so dashboard /notam/recent can read instantly
+_redis_client = None
+
+
+def _publish_to_redis(event: dict) -> None:
+    """Best-effort LPUSH + LTRIM to Redis skyops:notam:stream (max 500)."""
+    global _redis_client
+    if _redis_client is None:
+        try:
+            import redis  # type: ignore
+            _redis_client = redis.Redis(
+                host=os.getenv("REDIS_HOST", "localhost"),
+                port=int(os.getenv("REDIS_PORT", "6379")),
+                db=int(os.getenv("REDIS_DB", "0")),
+                decode_responses=True,
+                socket_connect_timeout=2,
+            )
+            _redis_client.ping()
+        except Exception as e:
+            logger.warning("Redis 비활성 (%s) — dashboard /notam/recent는 비어있음", e)
+            _redis_client = False  # sentinel: skip future tries
+            return
+    if _redis_client is False:
+        return
+
+    # Project to /notam/recent expected shape (event_model.md 2.6)
+    payload = {
+        "notam_number": event.get("notam_id"),
+        "notam_class": event.get("notam_class"),
+        "location_icao": event.get("icao_code") or (
+            event.get("affected_location", {}).get("identifier")
+            if isinstance(event.get("affected_location"), dict) else None
+        ),
+        "fir_icao": event.get("fir_code"),
+        "text_raw": event.get("text_raw"),
+        "text_english": event.get("text_en"),
+        "text_korean": event.get("text_ko"),
+        "effective_start": event.get("effective_from"),
+        "effective_end": event.get("effective_until"),
+        "severity": _severity_from_impact(event.get("operational_impact_score", 0.0)),
+        "selection_code": event.get("selection_code"),
+        "_mock": event.get("_mock", False),
+    }
+    try:
+        _redis_client.lpush("skyops:notam:stream", json.dumps(payload, ensure_ascii=False))
+        _redis_client.ltrim("skyops:notam:stream", 0, 499)
+    except Exception as e:
+        logger.warning("Redis LPUSH 실패: %s", e)
+
+
+def _severity_from_impact(impact: float) -> str:
+    """Map 0-1 operational_impact_score to NOTAM severity enum."""
+    if impact >= 0.7:
+        return "CRITICAL"
+    if impact >= 0.4:
+        return "WARNING"
+    if impact >= 0.2:
+        return "ADVISORY"
+    return "INFO"
+
+
 def build_mock_notam(template: dict) -> dict:
     """NOTAMEvent schema (event_model.md 2.6)."""
     now = datetime.now(timezone.utc)
@@ -224,6 +285,9 @@ def main():
             )
         except Exception as e:
             logger.error(f"Kafka send 실패: {e}")
+
+        # P6-G: dashboard fanout — best-effort, never blocks Kafka path
+        _publish_to_redis(event)
 
         for _ in range(INTERVAL_SEC):
             if stopping:

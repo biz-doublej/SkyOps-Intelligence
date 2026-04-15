@@ -13,7 +13,7 @@ import traceback
 
 from fastapi import APIRouter, HTTPException, WebSocket, WebSocketDisconnect
 
-from common.constants import REDIS_AIRCRAFT_LATEST, REDIS_ANOMALY_STREAM
+from common.constants import REDIS_AIRCRAFT_LATEST, REDIS_ANOMALY_STREAM, REDIS_NOTAM_STREAM
 from common.redis_client import get_redis, safe_float
 
 router = APIRouter(tags=["dashboard"])
@@ -117,6 +117,104 @@ def get_aircraft_h3(resolution: int = 5):
 def get_anomaly_recent(limit: int = 50):
     """최근 이상 탐지 이벤트 (Redis 조회)."""
     return _read_anomalies_from_redis(limit)
+
+
+# ── P6-G · NOTAM live feed ────────────────────────────────────────────
+def _read_notams_from_redis(limit: int = 50,
+                            location_icao: str | None = None,
+                            severity: str | None = None) -> list[dict]:
+    """Read recent NOTAMs from skyops:notam:stream Redis list.
+
+    swim_subscriber.py / notam_producer.py LPUSH json strings.
+    """
+    r = get_redis()
+    if r is None:
+        return []
+    try:
+        # 충분히 가져온 후 필터 (prod에선 별도 인덱스 권장)
+        raw = r.lrange(REDIS_NOTAM_STREAM, 0, max(limit * 4, 200) - 1)
+    except Exception:
+        traceback.print_exc()
+        return []
+
+    items: list[dict] = []
+    for s in raw:
+        try:
+            n = _json.loads(s)
+        except Exception:
+            continue
+        if location_icao and (n.get("location_icao") or "").upper() != location_icao.upper():
+            continue
+        if severity and (n.get("severity") or "").upper() != severity.upper():
+            continue
+        items.append(n)
+        if len(items) >= limit:
+            break
+    return items
+
+
+@router.get("/notam/recent")
+def get_notam_recent(limit: int = 50,
+                     location_icao: str | None = None,
+                     severity: str | None = None):
+    """Recent NOTAMs (FAA SWIM live or mock).
+
+    Filters:
+      location_icao  (e.g. RKSI, EGLL)
+      severity       INFO|ADVISORY|WARNING|CRITICAL
+    """
+    return _read_notams_from_redis(limit=limit,
+                                   location_icao=location_icao,
+                                   severity=severity)
+
+
+@router.get("/notam/stats")
+def get_notam_stats():
+    """Per-airport summary of recent NOTAMs (rolling window)."""
+    rows = _read_notams_from_redis(limit=500)
+    by_airport: dict[str, dict] = {}
+    by_class: dict[str, int] = {}
+    by_severity: dict[str, int] = {}
+    for n in rows:
+        ap = (n.get("location_icao") or "UNKNOWN").upper()
+        klass = (n.get("notam_class") or "UNKNOWN").upper()
+        sev = (n.get("severity") or "INFO").upper()
+        by_airport.setdefault(ap, {"airport": ap, "count": 0, "critical": 0,
+                                    "warning": 0, "advisory": 0, "info": 0})
+        by_airport[ap]["count"] += 1
+        by_airport[ap][sev.lower()] = by_airport[ap].get(sev.lower(), 0) + 1
+        by_class[klass] = by_class.get(klass, 0) + 1
+        by_severity[sev] = by_severity.get(sev, 0) + 1
+
+    return {
+        "total": len(rows),
+        "by_airport": sorted(by_airport.values(), key=lambda d: -d["count"])[:20],
+        "by_class": by_class,
+        "by_severity": by_severity,
+    }
+
+
+# ── WebSocket: NOTAM stream (P6-G) ────────────────────────────────────
+@router.websocket("/ws/notams")
+async def ws_notams(websocket: WebSocket):
+    """5초 간격 신규 NOTAM WebSocket push."""
+    await websocket.accept()
+    last_count = 0
+    try:
+        while True:
+            r = get_redis()
+            if r:
+                current_count = r.llen(REDIS_NOTAM_STREAM) or 0
+                if current_count > last_count:
+                    new_n = current_count - last_count
+                    data = _read_notams_from_redis(new_n)
+                    await websocket.send_json(data)
+                    last_count = current_count
+            await asyncio.sleep(5)
+    except WebSocketDisconnect:
+        pass
+    except Exception:
+        pass
 
 
 # ── WebSocket endpoints ──────────────────────────────────────────────

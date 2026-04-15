@@ -10,12 +10,14 @@ import {
   Layers,
   MessageSquare,
   Plane,
+  ScrollText,
 } from "lucide-react";
 
 const NAV_ITEMS = [
   { href: "/", label: "대시보드", icon: LayoutDashboard },
   { href: "/map", label: "실시간 지도", icon: Map },
   { href: "/anomaly", label: "이상 탐지", icon: AlertTriangle },
+  { href: "/notam", label: "NOTAM (실시간)", icon: ScrollText },
   { href: "/predict", label: "지연 예측", icon: Clock },
   { href: "/heatmap", label: "혼잡도 맵", icon: Layers },
   { href: "/chat", label: "AI 어시스턴트", icon: MessageSquare },
