@@ -1,0 +1,177 @@
+# SkyOps Intelligence — NAS deployment (P8-C · 2026-04-15)
+# ============================================================================
+# Low-memory profile for home NAS (Synology/QNAP, ~2-4 GB available).
+#
+# vs docker-compose.prod.yml:
+#   - vLLM REMOVED (GPU 없음 — RAG fallback mode로 운영)
+#   - Kafka 제거 (NAS에선 polling 기반 producer만)
+#   - Redis memory 256Mi (vs 512Mi)
+#   - API uvicorn --workers 1 (vs auto)
+#   - Grafana retention 7d (vs 15d)
+#   - Prometheus retention 7d
+#   - All containers: mem_limit + cpu quota
+#
+# Launch:
+#   docker compose -f docker-compose.nas.yml up -d
+#   # API:       http://<NAS-IP>:8000/docs
+#   # Dashboard: http://<NAS-IP>:3000
+#   # Grafana:   http://<NAS-IP>:3001  (admin/skyops)
+#
+# 리소스 요구 (합산 cap):
+#   RAM: ~1.8 GB
+#   CPU: 2 cores 가능
+#   Disk: ~5 GB (모델 + vectordb + 7d metrics)
+
+networks:
+  skyops-nas:
+    driver: bridge
+
+volumes:
+  redis-nas-data:
+  prom-nas-data:
+  grafana-nas-data:
+
+services:
+  # ── Redis (low memory) ────────────────────────────────────────────
+  redis:
+    image: redis:7.2-alpine
+    container_name: skyops-redis-nas
+    restart: unless-stopped
+    networks: [skyops-nas]
+    command: >
+      redis-server
+      --maxmemory 256mb
+      --maxmemory-policy allkeys-lru
+      --save ""
+      --appendonly no
+    volumes:
+      - redis-nas-data:/data
+    ports:
+      - "6379:6379"
+    mem_limit: 320m
+    cpus: 0.5
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 30s
+      timeout: 3s
+      retries: 3
+
+  # ── SkyOps API (CPU-only, single worker) ──────────────────────────
+  api:
+    build:
+      context: .
+      dockerfile: Dockerfile.api
+    image: skyops/api:nas-2.1.1
+    container_name: skyops-api-nas
+    restart: unless-stopped
+    networks: [skyops-nas]
+    depends_on:
+      redis:
+        condition: service_healthy
+    environment:
+      # App
+      REDIS_HOST: redis
+      REDIS_PORT: "6379"
+      # RAG fallback — vLLM 없으므로 RAG 체인이 retrieve만 리턴
+      VLLM_BASE_URL: ""
+      LLM_MODE: "fallback"
+      # Observability — lineage/iceberg opt-in
+      OTEL_ENABLED: "1"
+      OTEL_SERVICE_NAME: "skyops-api-nas"
+      OTEL_OTLP_EXPORTER: "0"          # 직접 Prometheus scrape만
+      OTEL_CONSOLE_EXPORTER: "0"
+      ICEBERG_ENABLED: "0"             # NAS 저장소 절약
+      FEAST_ENABLED: "0"
+      # Single worker to fit memory
+      UVICORN_WORKERS: "1"
+      AUDIT_STDOUT: "1"                # stdout 로 audit → 컨테이너 log driver
+    volumes:
+      - ./data/models:/app/data/models:ro
+      - ./data/vectordb:/app/data/vectordb:ro
+      - ./data/icao:/app/data/icao:ro
+    ports:
+      - "8000:8000"
+    mem_limit: 800m
+    cpus: 1.0
+    healthcheck:
+      test: ["CMD", "curl", "-fsS", "http://localhost:8000/health"]
+      interval: 60s
+      timeout: 5s
+      retries: 3
+      start_period: 60s
+
+  # ── Dashboard (Next.js production build) ──────────────────────────
+  dashboard:
+    build:
+      context: .
+      dockerfile: Dockerfile.dashboard
+    image: skyops/dashboard:nas-2.1.1
+    container_name: skyops-dashboard-nas
+    restart: unless-stopped
+    networks: [skyops-nas]
+    depends_on: [api]
+    environment:
+      NODE_ENV: production
+      NEXT_PUBLIC_API_URL: "http://api:8000"
+      NEXT_PUBLIC_WS_URL: "ws://api:8000"
+      # NAS: disable Next telemetry
+      NEXT_TELEMETRY_DISABLED: "1"
+    ports:
+      - "3000:3000"
+    mem_limit: 400m
+    cpus: 0.5
+    healthcheck:
+      test: ["CMD", "wget", "-q", "-O", "-", "http://localhost:3000"]
+      interval: 60s
+      timeout: 5s
+      retries: 3
+      start_period: 60s
+
+  # ── Prometheus (7d retention) ─────────────────────────────────────
+  prometheus:
+    image: prom/prometheus:v2.55.0
+    container_name: skyops-prom-nas
+    restart: unless-stopped
+    networks: [skyops-nas]
+    volumes:
+      - ./monitoring/prometheus/prometheus.yml:/etc/prometheus/prometheus.yml:ro
+      - ./monitoring/prometheus/rules.yml:/etc/prometheus/rules.yml:ro
+      - prom-nas-data:/prometheus
+    command:
+      - --config.file=/etc/prometheus/prometheus.yml
+      - --storage.tsdb.path=/prometheus
+      - --storage.tsdb.retention.time=7d
+      - --storage.tsdb.retention.size=500MB
+      - --web.enable-lifecycle
+      - --web.enable-admin-api
+    ports:
+      - "9090:9090"
+    mem_limit: 300m
+    cpus: 0.3
+
+  # ── Grafana (with auto-provisioned SLO dashboard) ─────────────────
+  grafana:
+    image: grafana/grafana:11.3.0
+    container_name: skyops-grafana-nas
+    restart: unless-stopped
+    networks: [skyops-nas]
+    depends_on: [prometheus]
+    environment:
+      GF_SECURITY_ADMIN_USER: admin
+      GF_SECURITY_ADMIN_PASSWORD: skyops
+      GF_USERS_ALLOW_SIGN_UP: "false"
+      GF_AUTH_ANONYMOUS_ENABLED: "true"
+      GF_AUTH_ANONYMOUS_ORG_ROLE: Viewer
+      GF_ANALYTICS_REPORTING_ENABLED: "false"
+      GF_ANALYTICS_CHECK_FOR_UPDATES: "false"
+      # NAS: turn off heavy plugins
+      GF_INSTALL_PLUGINS: ""
+      GF_PLUGINS_ENABLE_ALPHA: "false"
+    volumes:
+      - ./monitoring/grafana/provisioning:/etc/grafana/provisioning:ro
+      - ./monitoring/grafana/dashboards:/etc/grafana/dashboards:ro
+      - grafana-nas-data:/var/lib/grafana
+    ports:
+      - "3001:3000"
+    mem_limit: 250m
+    cpus: 0.3

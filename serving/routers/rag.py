@@ -1,11 +1,13 @@
 """RAG + LLM explanation router — /chat, /explain/anomaly.
 
 ADR-001 Migration Phase 1 (2026-04-14 P3).
+P8-C (2026-04-15): LLM_MODE=fallback for NAS deployment (no vLLM).
 """
 
 from __future__ import annotations
 
 import json
+import os
 import time
 import urllib.request as ur
 
@@ -24,6 +26,24 @@ from common.telemetry import get_tracer
 router = APIRouter(tags=["llm"])
 tracer = get_tracer("rag")
 
+# P8-C: NAS mode — RAG retrieve만, LLM 호출 생략
+LLM_MODE = os.getenv("LLM_MODE", "vllm")  # "vllm" | "fallback"
+
+
+def _fallback_answer(question: str, sources: list[dict]) -> str:
+    """RAG retrieval 결과를 템플릿으로 요약 (LLM 없이, NAS 모드)."""
+    if not sources:
+        return ("[LLM fallback mode] 현재 vLLM 서버가 연결되지 않아 자동 응답을 생성하지 못합니다. "
+                f"질문: \"{question}\". 관련 문서를 찾지 못했습니다. "
+                "AI 어시스턴트 전체 기능은 GPU 환경에서 활성화됩니다.")
+    head = "[LLM fallback mode — 관련 규정 요약만 제공]\n\n"
+    lines = []
+    for i, s in enumerate(sources[:3], 1):
+        section = s.get("section", "관련 문서")
+        excerpt = (s.get("text") or "")[:300].strip()
+        lines.append(f"[{i}] {section}\n{excerpt}\n")
+    return head + "\n".join(lines) + "\n※ 정확한 대응 절차는 관제사/담당자와 협의 후 결정하십시오."
+
 
 @router.post("/chat", response_model=ChatResponse)
 def chat(req: ChatRequest) -> ChatResponse:
@@ -34,6 +54,23 @@ def chat(req: ChatRequest) -> ChatResponse:
         span.set_attribute("question_length", len(req.question))
 
         if req.use_rag:
+            # P8-C: fallback mode — skip LLM call, return retrieval summary
+            if LLM_MODE == "fallback":
+                try:
+                    with tracer.start_as_current_span("rag_retrieve_only"):
+                        chain = ModelStore.rag()
+                        result = chain.retrieve_only(req.question) \
+                            if hasattr(chain, "retrieve_only") else chain.query(req.question)
+                except Exception as e:
+                    raise HTTPException(status_code=500, detail=f"RAG retrieve 오류: {e}")
+                sources = result.get("sources", [])
+                return ChatResponse(
+                    answer=_fallback_answer(req.question, sources),
+                    sources=sources,
+                    latency_ms=round((time.time() - t0) * 1000, 1),
+                    rag_used=True,
+                )
+
             try:
                 with tracer.start_as_current_span("rag_chain_query"):
                     chain = ModelStore.rag()
@@ -46,6 +83,15 @@ def chat(req: ChatRequest) -> ChatResponse:
                 sources=result["sources"],
                 latency_ms=result["latency_ms"],
                 rag_used=True,
+            )
+
+        # P8-C: fallback mode without RAG → terse template response
+        if LLM_MODE == "fallback":
+            return ChatResponse(
+                answer=_fallback_answer(req.question, []),
+                sources=[],
+                latency_ms=round((time.time() - t0) * 1000, 1),
+                rag_used=False,
             )
 
         # 직접 vLLM 호출 (RAG 없이)
