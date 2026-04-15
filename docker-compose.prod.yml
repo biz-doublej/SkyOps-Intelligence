@@ -20,6 +20,8 @@ volumes:
   redis-data:
   kafka-data:
   zookeeper-data:
+  prometheus-data:
+  grafana-data:
 
 services:
   # ── Infrastructure ─────────────────────────────────────────────────
@@ -172,3 +174,41 @@ services:
       - "4317:4317"  # OTLP gRPC (host → collector)
       - "4318:4318"  # OTLP HTTP
       - "8889:8889"  # Prometheus metrics
+
+  # ── Prometheus (P6-E · 2026-04-15) ────────────────────────────────
+  prometheus:
+    image: prom/prometheus:v2.55.0
+    networks: [skyops]
+    profiles: [observability]
+    volumes:
+      - ./monitoring/prometheus/prometheus.yml:/etc/prometheus/prometheus.yml:ro
+      - ./monitoring/prometheus/rules.yml:/etc/prometheus/rules.yml:ro
+      - prometheus-data:/prometheus
+    command:
+      - --config.file=/etc/prometheus/prometheus.yml
+      - --storage.tsdb.path=/prometheus
+      - --storage.tsdb.retention.time=15d
+      - --web.console.libraries=/etc/prometheus/console_libraries
+      - --web.console.templates=/etc/prometheus/consoles
+      - --web.enable-lifecycle    # allow `curl -X POST /-/reload`
+    ports:
+      - "9090:9090"
+
+  # ── Grafana (P6-E · SLO/SLI dashboard) ────────────────────────────
+  grafana:
+    image: grafana/grafana:11.3.0
+    networks: [skyops]
+    profiles: [observability]
+    depends_on: [prometheus]
+    environment:
+      GF_SECURITY_ADMIN_USER: admin
+      GF_SECURITY_ADMIN_PASSWORD: skyops
+      GF_USERS_ALLOW_SIGN_UP: "false"
+      GF_AUTH_ANONYMOUS_ENABLED: "true"
+      GF_AUTH_ANONYMOUS_ORG_ROLE: Viewer
+    volumes:
+      - ./monitoring/grafana/provisioning:/etc/grafana/provisioning:ro
+      - ./monitoring/grafana/dashboards:/etc/grafana/dashboards:ro
+      - grafana-data:/var/lib/grafana
+    ports:
+      - "3001:3000"  # Grafana on host:3001 (dashboard 3000 충돌 회피)

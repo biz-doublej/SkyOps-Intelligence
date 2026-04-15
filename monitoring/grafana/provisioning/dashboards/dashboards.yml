@@ -1,0 +1,11 @@
+# Grafana auto-load dashboards from /etc/grafana/dashboards (P6-E)
+apiVersion: 1
+providers:
+  - name: skyops
+    orgId: 1
+    folder: "SkyOps"
+    type: file
+    disableDeletion: false
+    updateIntervalSeconds: 30
+    options:
+      path: /etc/grafana/dashboards

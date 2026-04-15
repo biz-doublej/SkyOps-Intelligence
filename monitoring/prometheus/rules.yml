@@ -1,0 +1,85 @@
+# SkyOps SLO/SLI recording + alerting rules (P6-E · 2026-04-15)
+# ============================================================================
+# SLOs (per service):
+#   - api gateway:    p99 latency < 250ms, error budget 99.5%
+#   - delay:          p95 latency < 500ms (XGBoost + Conformal)
+#   - anomaly:        p95 latency < 200ms (Per-phase IF)
+#   - rag:            p95 latency < 5s (RAG + LLM)
+#   - active-learning queue: 95% of items processed within 24h
+
+groups:
+  - name: skyops-recording
+    interval: 30s
+    rules:
+      # Per-endpoint p95/p99 latency (5-minute window)
+      - record: skyops:http_request_latency_seconds:p95_5m
+        expr: |
+          histogram_quantile(0.95,
+            sum by (le, handler) (
+              rate(http_request_duration_seconds_bucket{job="skyops-api"}[5m])
+            )
+          )
+
+      - record: skyops:http_request_latency_seconds:p99_5m
+        expr: |
+          histogram_quantile(0.99,
+            sum by (le, handler) (
+              rate(http_request_duration_seconds_bucket{job="skyops-api"}[5m])
+            )
+          )
+
+      # Error rate (5xx) per handler
+      - record: skyops:http_5xx_rate_5m
+        expr: |
+          sum by (handler) (
+            rate(http_requests_total{job="skyops-api", status=~"5.."}[5m])
+          )
+          /
+          sum by (handler) (
+            rate(http_requests_total{job="skyops-api"}[5m])
+          )
+
+      # Anomaly detection precision drift (proxy)
+      # Uses the ratio of HIGH severity alerts to total — rapid increase = drift
+      - record: skyops:anomaly_high_severity_ratio_1h
+        expr: |
+          sum(rate(skyops_anomaly_alerts_total{severity="HIGH"}[1h]))
+          /
+          sum(rate(skyops_anomaly_alerts_total[1h]))
+
+  - name: skyops-alerts
+    rules:
+      - alert: ApiHighErrorRate
+        expr: skyops:http_5xx_rate_5m{handler!~"/health|/metrics"} > 0.01
+        for: 5m
+        labels:
+          severity: warning
+          team: skyops-serving
+        annotations:
+          summary: "API error rate > 1% on {{ $labels.handler }}"
+          description: "5xx rate is {{ $value | humanizePercentage }} for handler {{ $labels.handler }}"
+
+      - alert: DelayLatencyHigh
+        expr: skyops:http_request_latency_seconds:p95_5m{handler="/predict/delay"} > 0.5
+        for: 10m
+        labels:
+          severity: warning
+          team: skyops-ml
+        annotations:
+          summary: "Delay endpoint p95 latency > 500ms"
+          description: "p95 = {{ $value }}s — possible model degradation or load increase"
+
+      - alert: AnomalyPrecisionDrift
+        expr: |
+          (
+            skyops:anomaly_high_severity_ratio_1h
+            -
+            avg_over_time(skyops:anomaly_high_severity_ratio_1h[24h])
+          ) > 0.15
+        for: 30m
+        labels:
+          severity: warning
+          team: skyops-ml
+        annotations:
+          summary: "Anomaly HIGH-severity ratio drifted +15pp from 24h baseline"
+          description: "Current = {{ $value | humanizePercentage }}. Investigate alert fatigue or true incident."

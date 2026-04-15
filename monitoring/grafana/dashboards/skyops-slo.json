@@ -1,0 +1,126 @@
+{
+  "uid": "skyops-slo-v1",
+  "title": "SkyOps · SLO / SLI Overview",
+  "tags": ["skyops", "slo"],
+  "timezone": "browser",
+  "schemaVersion": 38,
+  "version": 1,
+  "refresh": "30s",
+  "time": { "from": "now-1h", "to": "now" },
+  "panels": [
+    {
+      "id": 1,
+      "type": "stat",
+      "title": "API up",
+      "gridPos": { "h": 4, "w": 4, "x": 0, "y": 0 },
+      "targets": [{ "expr": "up{job=\"skyops-api\"}", "legendFormat": "api" }],
+      "fieldConfig": {
+        "defaults": {
+          "mappings": [
+            { "type": "value", "options": { "0": { "text": "DOWN", "color": "red" } } },
+            { "type": "value", "options": { "1": { "text": "UP", "color": "green" } } }
+          ]
+        }
+      }
+    },
+    {
+      "id": 2,
+      "type": "stat",
+      "title": "Request rate (5m)",
+      "gridPos": { "h": 4, "w": 4, "x": 4, "y": 0 },
+      "targets": [{
+        "expr": "sum(rate(http_requests_total{job=\"skyops-api\"}[5m]))",
+        "legendFormat": "req/s"
+      }],
+      "fieldConfig": { "defaults": { "unit": "reqps" } }
+    },
+    {
+      "id": 3,
+      "type": "stat",
+      "title": "Error rate (5xx, 5m)",
+      "gridPos": { "h": 4, "w": 4, "x": 8, "y": 0 },
+      "targets": [{
+        "expr": "sum(rate(http_requests_total{job=\"skyops-api\",status=~\"5..\"}[5m])) / sum(rate(http_requests_total{job=\"skyops-api\"}[5m]))",
+        "legendFormat": "err"
+      }],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "percentunit",
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              { "value": null, "color": "green" },
+              { "value": 0.005, "color": "yellow" },
+              { "value": 0.01, "color": "red" }
+            ]
+          }
+        }
+      }
+    },
+    {
+      "id": 4,
+      "type": "stat",
+      "title": "Anomaly HIGH ratio (1h)",
+      "gridPos": { "h": 4, "w": 4, "x": 12, "y": 0 },
+      "targets": [{
+        "expr": "skyops:anomaly_high_severity_ratio_1h",
+        "legendFormat": "high"
+      }],
+      "fieldConfig": { "defaults": { "unit": "percentunit" } }
+    },
+    {
+      "id": 5,
+      "type": "timeseries",
+      "title": "Request latency p95 by handler",
+      "gridPos": { "h": 8, "w": 12, "x": 0, "y": 4 },
+      "targets": [{
+        "expr": "skyops:http_request_latency_seconds:p95_5m",
+        "legendFormat": "{{handler}} p95"
+      }],
+      "fieldConfig": { "defaults": { "unit": "s" } }
+    },
+    {
+      "id": 6,
+      "type": "timeseries",
+      "title": "Request latency p99 by handler",
+      "gridPos": { "h": 8, "w": 12, "x": 12, "y": 4 },
+      "targets": [{
+        "expr": "skyops:http_request_latency_seconds:p99_5m",
+        "legendFormat": "{{handler}} p99"
+      }],
+      "fieldConfig": { "defaults": { "unit": "s" } }
+    },
+    {
+      "id": 7,
+      "type": "timeseries",
+      "title": "Request rate by handler",
+      "gridPos": { "h": 8, "w": 12, "x": 0, "y": 12 },
+      "targets": [{
+        "expr": "sum by (handler) (rate(http_requests_total{job=\"skyops-api\"}[1m]))",
+        "legendFormat": "{{handler}}"
+      }],
+      "fieldConfig": { "defaults": { "unit": "reqps" } }
+    },
+    {
+      "id": 8,
+      "type": "timeseries",
+      "title": "5xx by handler",
+      "gridPos": { "h": 8, "w": 12, "x": 12, "y": 12 },
+      "targets": [{
+        "expr": "skyops:http_5xx_rate_5m",
+        "legendFormat": "{{handler}}"
+      }],
+      "fieldConfig": { "defaults": { "unit": "percentunit" } }
+    },
+    {
+      "id": 9,
+      "type": "timeseries",
+      "title": "Anomaly alerts by severity (rate /min)",
+      "gridPos": { "h": 8, "w": 24, "x": 0, "y": 20 },
+      "targets": [{
+        "expr": "sum by (severity) (rate(skyops_anomaly_alerts_total[1m]))",
+        "legendFormat": "{{severity}}"
+      }]
+    }
+  ]
+}
