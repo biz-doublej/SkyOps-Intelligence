@@ -1,4 +1,4 @@
-# SkyOps Intelligence — Full Reproduction Guide (P5+ · 2026-04-15)
+# SkyOps Intelligence — Full Reproduction Guide (P7 · 2026-04-15)
 
 이 문서 한 장으로 **로컬 머신에서 전체 시스템 (FAA SWIM 실연동 포함)을 재현**할 수 있다.
 P0 → P5+ 전체 sprint의 결과물을 단일 entry point로 사용하기 위한 가이드.
@@ -283,7 +283,74 @@ SWIM_TRUSTSTORE_PATH=./data/secrets/swim_trust SWIM_RUN_SECONDS=60 \
 
 ---
 
-## 📐 Architecture Diagram
+## 1️⃣1️⃣ P6/P7 Stack — Feature Store / Schema / Iceberg / Lineage
+
+```bash
+# Install P6/P7 extras (optional but recommended for full stack)
+pip install -e ".[feast,schema,iceberg,lineage]"
+
+# Feature Store (P6-A) — register + seed
+python -m feature_store.apply
+python -m feature_store.materialize --lookback-days 7
+
+# Avro Schema Registry (P6-B)
+docker compose --profile schema up -d schema-registry
+python -m pipeline.schema_registry register-all
+python -m pipeline.schema_registry list
+
+# Iceberg Bronze/Silver/Gold (P6-D + P7-A writers)
+python -m feature_store.iceberg_bootstrap
+ICEBERG_ENABLED=1 skyops-api --port 8000   # /predict/delay logs to Gold
+
+# OpenLineage + Marquez (P7-B)
+docker compose -f docker-compose.prod.yml --profile lineage up -d
+OPENLINEAGE_URL=http://localhost:5000 python analysis/xgboost_model.py
+# Marquez UI: http://localhost:3000
+
+# Active Learning closing loop (P6-C + P7-C bandit)
+python -m analysis.active_learning_retrain --dry-run
+curl 'http://localhost:8000/active-learning/next?strategy=bandit_v2&top_k=10'
+
+# Korean LLM corpus (P7-D)
+python llm_data/generate_korean_aviation_corpus.py --n-sft 3000 --n-dpo 500
+cat data/alpaca/korean_aviation_sft.jsonl >> data/alpaca/aviation_alpaca_train.jsonl
+
+# KAC ACDM (P7-E)
+KAC_API_KEY=xxx python pipeline/kac_acdm_client.py
+ATFM_MODE=kac KAC_API_KEY=xxx python pipeline/atfm_producer.py
+```
+
+---
+
+## 1️⃣2️⃣ Production k8s — Argo Rollouts + Security (P7-F)
+
+```bash
+# 1. Argo Rollouts controller
+helm repo add argo https://argoproj.github.io/argo-helm
+helm install argo-rollouts argo/argo-rollouts -n argo-rollouts --create-namespace
+
+# 2. Pod Security restricted profile
+kubectl apply -f k8s/security/namespace-psa.yaml
+
+# 3. NetworkPolicies (zero-trust)
+kubectl apply -f k8s/security/network-policies.yaml
+
+# 4. Canary rollout
+kubectl apply -f k8s/rollouts/
+
+# 5. Watch progressive rollout (5% → 25% → 50% → 100%)
+kubectl argo rollouts dashboard
+# or
+kubectl argo rollouts get rollout skyops-api -n skyops --watch
+
+# Promote / abort manually
+kubectl argo rollouts promote skyops-api -n skyops
+kubectl argo rollouts abort   skyops-api -n skyops
+```
+
+---
+
+## 📐 Architecture Diagram (v2 · P7)
 
 ```mermaid
 flowchart TB
@@ -291,21 +358,23 @@ flowchart TB
     OSky[OpenSky ADS-B<br/>Network]:::ext
     NOAA[NOAA / KMA<br/>METAR/TAF]:::ext
     SWIM[FAA SWIM<br/>NOTAM JMS]:::ext
+    KAC[KAC ACDM<br/>공공데이터]:::ext
 
-    %% Kafka topics
-    subgraph Kafka [Apache Kafka]
+    %% Kafka + Schema Registry (P6-B)
+    subgraph Kafka [Apache Kafka + Schema Registry]
         T1[flight-position]
         T2[weather-event]
         T3[notam]
         T4[atfm-restriction]
         T5[alert-decision]
+        SR[(Confluent SR<br/>5 Avro schemas)]:::sr
     end
 
     %% Producers
     OSky -->|opensky_producer.py| T1
     NOAA -->|metar_producer.py| T2
     SWIM -->|swim_subscriber.py<br/>SMF/TLS| T3
-    AFTMmock[atfm_producer.py mock] --> T4
+    KAC  -->|kac_acdm_client.py<br/>ATFM_MODE=kac| T4
 
     %% Stream processor
     T1 --> Flink[flink_processor.py<br/>Window + CEP +<br/>Phase classifier]
@@ -315,55 +384,101 @@ flowchart TB
     Flink -->|anomalies| T5
     T5 --> Redis
 
+    %% Iceberg medallion (P6-D + P7-A)
+    subgraph Iceberg [Apache Iceberg]
+        IBronze[(Bronze<br/>raw events × 4)]
+        ISilver[(Silver<br/>features × 3)]
+        IGold[(Gold<br/>train + inference × 3)]
+    end
+    T1 -.->|bronze sink| IBronze
+    T2 -.->|bronze sink| IBronze
+    T3 -.->|bronze sink| IBronze
+    T4 -.->|bronze sink| IBronze
+
+    %% Feature Store (P6-A)
+    subgraph Feast [Feast Feature Store]
+        FOff[(Offline<br/>parquet)]
+        FOn[(Online<br/>Redis db=1)]
+    end
+    ISilver -.-> FOff
+    FOff -.->|feast materialize| FOn
+
     %% Models
     subgraph Models [Model artifacts]
         XGB[xgboost_best.pkl<br/>P1 Rotation features]
         Conf[conformal_calibrator<br/>split + cqr]
         IF7[isolation_forest_<br/>×7 phase]
         MLPhase[ml_phase_classifier]
+        LLM[vLLM Qwen2.5-7B<br/>+ DPO + Korean SFT]
     end
 
-    %% RAG
-    subgraph RAG
-        Chroma[(ChromaDB<br/>95 chunks)]
-        vLLM[vLLM Qwen2.5-7B<br/>+ DPO]
-    end
+    %% RAG (P6-F: 161 chunks)
+    Chroma[(ChromaDB<br/>161 chunks)]
 
-    %% FastAPI serving (post ADR-001 Phase 1)
-    subgraph API [FastAPI 2.1.0 thin entry]
-        gw[gateway router]
-        delay[delay router<br/>+ Conformal]
-        anom[anomaly router<br/>+ feedback<br/>+ active learning]
+    %% FastAPI serving (P7 · 2.1.1)
+    subgraph API [FastAPI 2.1.1 thin entry]
+        gw[gateway router<br/>/health × 4 blocks]
+        delay[delay router<br/>+ Conformal + Gold log]
+        anom[anomaly router<br/>+ AL bandit v2]
         rag[rag router]
         notif[notification router]
-        stream[streaming router<br/>+ WebSocket]
+        stream[streaming router<br/>+ /notam/* + WS]
     end
 
     XGB --> delay
     Conf --> delay
     IF7 --> anom
     MLPhase --> anom
+    FOn -.->|future: feast online| delay
     Redis --> stream
     Redis --> anom
     Chroma --> rag
-    vLLM --> rag
-    vLLM --> notif
+    LLM --> rag
+    LLM --> notif
+    delay -.->|inference log| IGold
 
-    %% Dashboard
-    Dash[Next.js 16<br/>Dashboard<br/>6 pages]:::ui
+    %% Dashboard (P6-G: NOTAM live view)
+    Dash[Next.js 16<br/>Dashboard<br/>7 pages incl. NOTAM]:::ui
     Dash -->|REST + WS| API
 
-    %% Observability
-    API -->|OTLP| OTel[OTel Collector]
-    OTel --> Jaeger[Jaeger UI]
+    %% Observability stack (P5+ Jaeger + P6-E Prom/Graf + P7-B OL)
+    subgraph Obs [Observability]
+        OTel[OTel Collector]
+        Jaeger[Jaeger UI<br/>traces]
+        Prom[Prometheus<br/>recording + alerts]
+        Graf[Grafana<br/>SLO 9-panel]
+        Marquez[Marquez<br/>OpenLineage]
+    end
+    API -->|OTLP| OTel
+    OTel --> Jaeger
+    OTel --> Prom
+    Prom --> Graf
+    Models -.->|MLflow events| Marquez
 
-    %% Feedback loop
+    %% Active learning loop (P6-C closed)
     anom -->|feedback.jsonl| FB[(Analyst<br/>feedback)]
-    FB -->|active_learning.py| anom
+    FB -->|active_learning_retrain.py<br/>Airflow daily 02:00| IF7
+    IF7 -.->|.reload_signal| anom
 
     classDef ext fill:#fef3c7,stroke:#f59e0b
     classDef ui fill:#dbeafe,stroke:#3b82f6
+    classDef sr fill:#e0e7ff,stroke:#6366f1
 ```
+
+### What changed in v2 (vs v1 P5+)
+
+| Layer | v1 (P5+) | v2 (P7) |
+|-------|---------|---------|
+| Schema | event_model.md prose | **5 Avro + Confluent SR** (BACKWARD compat) |
+| Lineage | none | **Iceberg medallion + Marquez OL** |
+| Feature governance | scattered | **Feast** (offline parquet + online Redis db=1) |
+| Active learning | manual | **closed loop** (Airflow daily, hot-reload) |
+| Observability | Jaeger only | **+ Prometheus + Grafana + 3 alerts** |
+| RAG | 95 chunks | **161 chunks + KR specific** |
+| Dashboard | 6 pages | **7 pages incl. NOTAM live** |
+| ATFM | mock only | **mock + KAC public-data** |
+| LLM | English-bias | **+3000 KR SFT + 500 DPO pairs ready** |
+| k8s | basic Deployment | **Argo Rollouts canary + PSA + NetPol + Trivy** |
 
 ---
 
@@ -373,26 +488,33 @@ flowchart TB
 |------|------|
 | 최상위 README | `README.md` |
 | Canonical Event Model | `docs/event_model.md` |
+| Avro schemas (P6-B) | `pipeline/schemas/README.md` |
+| Iceberg medallion (P6-D + P7-A) | `feature_store/ICEBERG.md` |
+| k8s Security bundle (P7-F) | `k8s/security/README.md` |
 | Performance Benchmark | `docs/performance_benchmark.md` |
 | Limitations & Improvements | `docs/limitations_and_improvements.md` |
 | ADR-001 Service Decomposition | `docs/adr/ADR-001-service-decomposition.md` |
 | ADR-002 API Gateway (Traefik) | `docs/adr/ADR-002-api-gateway-selection.md` |
+| ADR-003 Multi-region (P7-G) | `docs/adr/ADR-003-multi-region-deployment.md` |
 | Final report (week14) | `docs/final_report.md` |
 | Strategic Review 2026-04-14 | (Notion + Obsidian) |
+| Makefile / tasks.py (P6-H) | `Makefile`, `tasks.py` |
 | Reproduction Guide (이 문서) | `docs/reproduction_guide.md` |
 
 ---
 
-## 🚀 Sprint Commit History (P0 ~ P5+)
+## 🚀 Sprint Commit History (P0 ~ P7)
 
 | Sprint | Commits | 핵심 변경 |
 |--------|---------|----------|
 | P0 | `b5b41c3` | TimeSeriesSplit 전환 |
-| P1 | `2863be8`, `cb3798c` | Conformal + Event Model + Rotation features |
+| P1 | `2863be8`, `cb3798c` | Conformal + Event Model + Rotation features (Test R² +335%) |
 | P2 | `3451269`, `df50fca`, `887bf1e` | ADR-001 + RAGAs + Phase-aware anomaly |
 | P3 | `e00a10b`, `5e32ee5`, `99807fc` | Dashboard README + OTel + router 분리 + Active Learning |
 | P4+ | `8a3ac43`, `c1854cb`, `c7508d7`, `83e4276`, `4f16c46`, `1318676`, `c7c3cf6` | Packaging + ADR-002 + ChromaDB + CQR + Docker/k8s/CI + AL endpoint + ATFM/NOTAM mock |
-| P5+ | `4249820`, ... | FAA SWIM real + ML phase + Per-phase IF + Jaeger + k8s 실배포 |
+| P5+ | `7d93872`, `4249820`, `7c80b2b`, `b4bcd44`, `9ed8498`, `6ec6e15`, `06e8ee3`, `7189a24` | **FAA SWIM real (219 NOTAMs/60s)** + ML phase + Per-phase IF + Jaeger + k8s 실배포 + Reproduction guide |
+| P6 | `69bfa9c`, `2a2bc74`, `5062fe6`, `f645230`, `7df64d1`, `63cf9cf`, `1aec5ba`, `ea14089`, `1ee975b` | **Feast + Avro SR + AL loop closing + Iceberg + Prom/Grafana + ChromaDB 161 + Dashboard NOTAM + Makefile** |
+| P7 | `bfafa8a`, `62734cf`, `e660bf4`, `4b00f17`, `2bafabd`, `dd0868c`, `f229927`, ... | **Iceberg writers + OpenLineage + Bandit AL v2 + KR SFT/DPO + KAC ACDM + Argo Rollouts/PSA/NetPol + ADR-003 multi-region** |
 
 ---
 
@@ -417,3 +539,26 @@ flowchart TB
 ### Solace Python `Failed to load trust store`
 - TRUST_STORE_PATH가 디렉토리여야 함 (단일 PEM 파일 아님)
 - `c_rehash` 형식 (`{hash}.0`) 파일이 디렉토리 안에 있어야 함
+
+### Feast `feast apply` 실패 — Redis 미연결
+- `docker compose up -d` 로 Redis 띄움
+- `feature_store.yaml` 의 connection_string `localhost:6379,db=1`이 conflict 시 변경
+
+### Iceberg `pyiceberg.exceptions.NamespaceAlreadyExistsError`
+- 정상 동작 — 두번째 `python -m feature_store.iceberg_bootstrap` 실행 시 namespace 가 이미 있음을 알림
+
+### Marquez UI 응답 없음
+- Postgres 초기화 30~60s 소요 — `docker compose -f docker-compose.prod.yml --profile lineage logs marquez` 확인
+- 포트 5000 충돌 (다른 dev server 와) — `marquez:` 의 ports 매핑 변경
+
+### NetworkPolicy 무시됨
+- CNI 가 NetworkPolicy 미지원 (e.g. plain flannel)
+- Calico/Cilium/Weave 설치 필요. Docker Desktop k8s 는 Calico 가 가장 단순:
+  ```bash
+  curl https://raw.githubusercontent.com/projectcalico/calico/v3.27.0/manifests/tigera-operator.yaml | kubectl apply -f -
+  ```
+
+### Argo Rollouts canary 가 시작하지 않음
+- `kubectl get rollout skyops-api -n skyops -o yaml` 에 paused 상태 확인
+- AnalysisTemplate 의 Prometheus address `http://prometheus.skyops:9090` 이 해석 가능한지 확인
+- `kubectl argo rollouts dashboard` 로 시각적 디버깅
