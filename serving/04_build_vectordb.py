@@ -194,7 +194,8 @@ def scan_corpus_folder(base: Path) -> list[dict[str, Any]]:
                 continue
 
             slug = re.sub(r"[^a-z0-9]+", "_", heading.lower())[:50].strip("_")
-            chunk_id = f"corpus_{domain}_{md_file.stem}_{slug or i}"
+            # P6-F: append index to guarantee uniqueness even when slugs collide
+            chunk_id = f"corpus_{domain}_{md_file.stem}_{slug or 'sec'}_{i}"
 
             chunks.append({
                 "chunk_id": chunk_id,
