@@ -84,7 +84,17 @@
 - ✅ **Docker Desktop k8s 검증**: `k8s/local/redis-only.yaml` — namespace + ConfigMap + Redis + Service + smoke pod. Pod → Service → Pod DNS 해결 (`redis-cli -h redis ping → PONG`) 확인.
 - ✅ **Reproduction guide**: `docs/reproduction_guide.md` 419 라인 — `git clone` → FAA SWIM live까지 단일 문서. SWIM trust store 셋업 스크립트 + Mermaid 아키텍처 다이어그램 + sprint commit 히스토리 + 트러블슈팅 7종 포함.
 
-### P5+ 이연 → P6 후보 과제
+### P6 완료 (2026-04-15)
+- ✅ **Feast Feature Store PoC**: `feature_store/` 패키지 — 4 entities, 4 feature views (flight_rotation/live_position/airport_congestion/notam_impact), 2 feature services. offline=parquet, online=Redis db=1. `/health` 에 feast 블록 추가. 병목 #6 (training-serving skew) closure.
+- ✅ **Avro 스키마 + Schema Registry**: `pipeline/schemas/` 5 .avsc (flight_position/weather/notam/atfm/alert_decision, namespace `com.skyops.events.v2`), `pipeline/schema_registry.py` CLI (list/validate/register-all), `docker-compose.yml --profile schema`로 Confluent SR 실행. 병목 #5 (Data Contract) closure.
+- ✅ **Active learning loop closing**: `analysis/active_learning_retrain.py` — feedback FP rate에 따라 phase별 contamination ±20% 튜닝, IF 자동 재학습, `data/models/.reload_signal` touch → ModelStore mtime watch로 hot-reload. `airflow/dags/skyops_active_learning_dag.py` 매일 02:00 UTC 실행.
+- ✅ **Apache Iceberg Bronze/Silver/Gold**: `feature_store/iceberg_bootstrap.py` — 10 tables (4 bronze + 3 silver + 3 gold), pyiceberg sql-catalog 백엔드 (SQLite, prod은 Glue/Hive 교체). 병목 #5 잔여 (Lineage) closure.
+- ✅ **Prometheus + Grafana SLO/SLI**: `monitoring/prometheus/{prometheus,rules}.yml`, `monitoring/grafana/` (자동 provisioning + 9 패널 SLO 대시보드). `docker-compose.prod.yml --profile observability`에 prometheus + grafana 추가. ApiHighErrorRate / DelayLatencyHigh / AnomalyPrecisionDrift 알람.
+- ✅ **ChromaDB 95→161 chunks**: 4개 신규 도메인 (faa_ac 12, runbook 18, rksi_local 15, airport_ops 21) — 12개 markdown. ID collision 버그 fix. 병목 #7 follow-up.
+- ✅ **Dashboard NOTAM 실시간 뷰**: `dashboard/src/app/notam/page.tsx` + `useNotamFeed` hook + WebSocket `/ws/notams`. 4 severity 카운터, ICAO/severity 필터, top-8 공항별 분포, Korean-first 텍스트 + Q-code badge. `serving/routers/streaming.py`에 `/notam/recent`, `/notam/stats` endpoint 추가. notam_producer + swim_subscriber가 Redis fanout. API_VERSION 2.1.1.
+- ✅ **Engineering Package**: `Makefile` + `tasks.py` (cross-platform Python runner). 30개 target — setup/data/p6-stack/test/docker/streaming/al/eval/cleanup. `make swim-trust` 또는 `python tasks.py` 한 번으로 모든 워크플로 실행.
+
+### P6 이연 → P7 후보 과제
 
 1. ✅ **비행 단계(이륙/순항/접근/착륙)별 차등 임계값 적용 — 2026-04-14 P2 완료**
    - `pipeline/phase_classifier.py` heuristic FlightPhase classifier (7 phases + UNKNOWN)
