@@ -1,0 +1,131 @@
+# SkyOps Helm Chart — default (baseline) values (P8-D · 2026-04-15)
+# ============================================================================
+# Environment-specific overrides:
+#   values.dev.yaml     — Docker Desktop / NAS
+#   values.staging.yaml — single-node k3s / GKE preview
+#   values.prod.yaml    — production GKE with canary + multi-region
+#
+# Install / upgrade:
+#   helm install skyops k8s/helm/skyops -n skyops --create-namespace \
+#     -f k8s/helm/skyops/values.yaml -f k8s/helm/skyops/values.prod.yaml
+#
+# Dry-run:
+#   helm template skyops k8s/helm/skyops -f values.staging.yaml | kubectl apply --dry-run=client -f -
+
+global:
+  environment: dev                          # dev | staging | prod
+  imageRegistry: ""                         # e.g. "ghcr.io/biz-doublej"
+  imagePullPolicy: IfNotPresent
+  storageClass: standard                    # override per cluster
+  podSecurityEnforce: restricted            # P7-F PSA level
+
+# ── Feature toggles (gates rolled up to 1 enum per environment) ─────
+features:
+  iceberg: false          # FEAST tier Iceberg writes
+  feast: false            # Feature Store online/offline
+  openlineage: false      # Marquez emit from training runs
+  schemaRegistry: false   # AvroProducer
+  canaryRollout: false    # Argo Rollouts (vs rolling deployment)
+  networkPolicy: false    # zero-trust NetPol (CNI required)
+  hitlApproval: true      # POST /anomaly/approve gate
+  auditStdout: false      # audit log → stdout vs file
+
+# ── API (FastAPI) ───────────────────────────────────────────────────
+api:
+  enabled: true
+  replicas: 2
+  image:
+    repository: skyops/api
+    tag: "2.1.1"
+  resources:
+    requests:
+      cpu: "250m"
+      memory: "512Mi"
+    limits:
+      cpu: "1000m"
+      memory: "1.5Gi"
+  env:
+    OTEL_ENABLED: "1"
+    LLM_MODE: "fallback"                    # default: no GPU
+    AUDIT_STDOUT: "0"
+  healthcheck:
+    path: /health
+    initialDelaySec: 30
+    periodSec: 30
+  autoscaling:
+    enabled: false
+    minReplicas: 2
+    maxReplicas: 10
+    targetCPUUtilizationPercentage: 70
+
+# ── Dashboard (Next.js) ─────────────────────────────────────────────
+dashboard:
+  enabled: true
+  replicas: 2
+  image:
+    repository: skyops/dashboard
+    tag: "2.1.1"
+  resources:
+    requests:
+      cpu: "100m"
+      memory: "256Mi"
+    limits:
+      cpu: "500m"
+      memory: "512Mi"
+
+# ── Redis ───────────────────────────────────────────────────────────
+redis:
+  enabled: true
+  image: redis:7.2-alpine
+  maxMemory: 256mb
+  persistence:
+    enabled: false
+    size: 1Gi
+  resources:
+    requests:
+      cpu: "50m"
+      memory: "128Mi"
+    limits:
+      cpu: "500m"
+      memory: "384Mi"
+
+# ── Ingress (Traefik IngressRoute preferred — ADR-002) ──────────────
+ingress:
+  enabled: true
+  className: traefik
+  host: skyops.local
+  tls:
+    enabled: false
+    secretName: ""
+
+# ── Observability (P5+ → P7) ────────────────────────────────────────
+observability:
+  jaeger:
+    enabled: false
+    endpoint: http://jaeger-collector.monitoring:4317
+  prometheus:
+    enabled: false
+    scrapeInterval: 15s
+  grafana:
+    enabled: false
+  marquez:
+    enabled: false
+
+# ── Secrets (placeholders — actual values via External Secrets / SealedSecrets) ─
+secrets:
+  swim:
+    # Create via: kubectl create secret generic skyops-swim-secret \
+    #   --from-literal=SWIM_USERNAME=... --from-literal=SWIM_PASSWORD=...
+    externalSecretName: skyops-swim-secret
+  kac:
+    externalSecretName: skyops-kac-secret  # data.go.kr service key
+  vllm:
+    externalSecretName: skyops-vllm-secret
+
+# ── HITL approval RBAC (P8-F) ──────────────────────────────────────
+rbac:
+  analysts:                                  # 이메일 또는 OIDC subject
+    - name: analyst.kr.1@skyops.io
+      role: approver
+    - name: atc.seoul.1@skyops.io
+      role: approver

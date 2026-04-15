@@ -1,0 +1,23 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: {{ .Release.Name }}-config
+  labels:
+    {{- include "skyops.labels" . | nindent 4 }}
+data:
+  # Runtime env
+  APP_ENV: {{ .Values.global.environment | quote }}
+  LLM_MODE: {{ .Values.api.env.LLM_MODE | default "fallback" | quote }}
+  OTEL_ENABLED: {{ .Values.api.env.OTEL_ENABLED | default "1" | quote }}
+  AUDIT_STDOUT: {{ .Values.api.env.AUDIT_STDOUT | default "0" | quote }}
+  FEAST_ENABLED: {{ if .Values.features.feast }}"1"{{ else }}"0"{{ end }}
+  ICEBERG_ENABLED: {{ if .Values.features.iceberg }}"1"{{ else }}"0"{{ end }}
+  HITL_APPROVAL_REQUIRED: {{ if .Values.features.hitlApproval }}"1"{{ else }}"0"{{ end }}
+  # Observability routing
+  {{- if .Values.observability.jaeger.enabled }}
+  OTEL_EXPORTER_OTLP_ENDPOINT: {{ .Values.observability.jaeger.endpoint | quote }}
+  OTEL_OTLP_EXPORTER: "1"
+  {{- end }}
+  # Redis wiring
+  REDIS_HOST: {{ .Release.Name }}-redis
+  REDIS_PORT: "6379"

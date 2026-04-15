@@ -1,0 +1,34 @@
+# dev overrides (Docker Desktop k8s, single node)
+global:
+  environment: dev
+
+api:
+  replicas: 1
+  resources:
+    requests: { cpu: "100m", memory: "256Mi" }
+    limits:   { cpu: "500m", memory: "768Mi" }
+  env:
+    LLM_MODE: "fallback"
+    OTEL_ENABLED: "0"
+
+dashboard:
+  replicas: 1
+
+redis:
+  persistence:
+    enabled: false
+
+ingress:
+  host: skyops.dev.local
+
+features:
+  hitlApproval: true
+  iceberg: false
+  feast: false
+  canaryRollout: false
+  networkPolicy: false
+
+observability:
+  jaeger:     { enabled: false }
+  prometheus: { enabled: false }
+  grafana:    { enabled: false }

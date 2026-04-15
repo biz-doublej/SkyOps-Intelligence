@@ -1,0 +1,76 @@
+# prod overrides (GKE asia-northeast3 — ADR-003 KR primary)
+global:
+  environment: prod
+  imageRegistry: asia-northeast3-docker.pkg.dev/skyops-prod/containers
+  imagePullPolicy: Always
+  storageClass: premium-rwo
+  podSecurityEnforce: restricted
+
+api:
+  replicas: 4
+  resources:
+    requests: { cpu: "500m", memory: "1Gi" }
+    limits:   { cpu: "2000m", memory: "4Gi" }
+  env:
+    LLM_MODE: "vllm"
+    OTEL_ENABLED: "1"
+    AUDIT_STDOUT: "1"
+    FEAST_ENABLED: "1"
+    ICEBERG_ENABLED: "1"
+  autoscaling:
+    enabled: true
+    minReplicas: 4
+    maxReplicas: 12
+    targetCPUUtilizationPercentage: 65
+
+dashboard:
+  replicas: 3
+  resources:
+    requests: { cpu: "200m", memory: "384Mi" }
+    limits:   { cpu: "1000m", memory: "768Mi" }
+
+redis:
+  persistence:
+    enabled: true
+    size: 20Gi
+  resources:
+    requests: { cpu: "100m", memory: "512Mi" }
+    limits:   { cpu: "1000m", memory: "1Gi" }
+  maxMemory: 768mb
+
+ingress:
+  host: api.skyops.io
+  tls:
+    enabled: true
+    secretName: skyops-prod-tls
+
+features:
+  iceberg: true
+  feast: true
+  openlineage: true
+  schemaRegistry: true
+  canaryRollout: true           # prod — Argo Rollouts 4-step
+  networkPolicy: true
+  hitlApproval: true
+  auditStdout: true
+
+observability:
+  jaeger:
+    enabled: true
+    endpoint: http://jaeger-collector.monitoring.svc.cluster.local:4317
+  prometheus:
+    enabled: true
+    scrapeInterval: 10s
+  grafana:
+    enabled: true
+  marquez:
+    enabled: true
+
+rbac:
+  analysts:
+    - name: ops-analyst-1@skyops.io
+      role: approver
+    - name: ops-analyst-2@skyops.io
+      role: approver
+    - name: atc-supervisor@skyops.io
+      role: supervisor

@@ -1,0 +1,18 @@
+apiVersion: v2
+name: skyops
+description: SkyOps Intelligence — real-time aviation operations platform
+type: application
+version: 0.1.0
+appVersion: "2.1.1"
+home: https://github.com/biz-doublej/SkyOps-Intelligence
+sources:
+  - https://github.com/biz-doublej/SkyOps-Intelligence
+keywords:
+  - aviation
+  - anomaly-detection
+  - ml-serving
+  - rag
+maintainers:
+  - name: DoubleJ
+    email: jjw050727@naver.com
+icon: https://raw.githubusercontent.com/biz-doublej/SkyOps-Intelligence/dev/dashboard/public/favicon.ico

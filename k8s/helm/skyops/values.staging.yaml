@@ -1,0 +1,50 @@
+# staging overrides (single-node k3s or GKE preview cluster)
+global:
+  environment: staging
+  imageRegistry: ghcr.io/biz-doublej
+  storageClass: standard-rwo
+
+api:
+  replicas: 2
+  resources:
+    requests: { cpu: "250m", memory: "512Mi" }
+    limits:   { cpu: "1500m", memory: "2Gi" }
+  env:
+    LLM_MODE: "vllm"
+    OTEL_ENABLED: "1"
+    AUDIT_STDOUT: "1"
+  autoscaling:
+    enabled: true
+    minReplicas: 2
+    maxReplicas: 5
+    targetCPUUtilizationPercentage: 75
+
+dashboard:
+  replicas: 2
+
+redis:
+  persistence:
+    enabled: true
+    size: 5Gi
+
+ingress:
+  host: staging.skyops.io
+  tls:
+    enabled: true
+    secretName: skyops-staging-tls
+
+features:
+  iceberg: true
+  feast: true
+  openlineage: true
+  schemaRegistry: true
+  canaryRollout: false       # staging은 rolling update
+  networkPolicy: true
+  hitlApproval: true
+  auditStdout: true
+
+observability:
+  jaeger:     { enabled: true }
+  prometheus: { enabled: true }
+  grafana:    { enabled: true }
+  marquez:    { enabled: true }
