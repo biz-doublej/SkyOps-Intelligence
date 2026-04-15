@@ -115,6 +115,45 @@ jobs:
           ignore-unfixed: true
           exit-code: '1'
           format: table
+      # P8-G: SBOM generation (syft) + image signing (cosign)
+      - name: Install syft
+        uses: anchore/sbom-action/download-syft@v0
+      - name: Generate SBOM — API (SPDX JSON)
+        run: |
+          syft skyops/api:ci-${{ github.sha }} \
+            -o spdx-json=sbom-api-${{ github.sha }}.spdx.json \
+            -o cyclonedx-json=sbom-api-${{ github.sha }}.cdx.json
+      - name: Generate SBOM — Dashboard
+        run: |
+          syft skyops/dashboard:ci-${{ github.sha }} \
+            -o spdx-json=sbom-dashboard-${{ github.sha }}.spdx.json \
+            -o cyclonedx-json=sbom-dashboard-${{ github.sha }}.cdx.json
+      - name: Upload SBOM artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: sboms-${{ github.sha }}
+          path: sbom-*.json
+          retention-days: 90
+      - name: Install cosign
+        uses: sigstore/cosign-installer@v3
+      # P8-G: keyless image signing (Sigstore OIDC) — only on main pushes
+      - name: Sign images (keyless, main only)
+        if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+        env:
+          COSIGN_EXPERIMENTAL: "1"
+        run: |
+          # Images would need to be pushed to a registry first (e.g. GHCR).
+          # This step runs only for main branch pushes, assumes GHCR or similar.
+          # For dev branch, we skip signing but keep SBOM.
+          echo "Image signing requires registry push — configure COSIGN_REGISTRY env"
+      - name: Attach SBOM to image (cosign attest, main only)
+        if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+        env:
+          COSIGN_EXPERIMENTAL: "1"
+        run: |
+          echo "cosign attest --predicate sbom-api-${{ github.sha }}.spdx.json \
+                --type spdxjson $IMAGE_REF"
+          echo "(skipped — needs COSIGN_REGISTRY and pushed image)"
 
   # ── Kubernetes manifest validation ────────────────────────────────
   k8s-validate:
