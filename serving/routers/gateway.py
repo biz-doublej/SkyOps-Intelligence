@@ -28,6 +28,15 @@ def _feast_health() -> dict:
         return {"enabled": False, "loaded": False, "repo_path": None}
 
 
+def _iceberg_health() -> dict:
+    """Attempt iceberg_health() without hard dependency on pyiceberg."""
+    try:
+        from feature_store.iceberg_writer import iceberg_health  # type: ignore
+        return iceberg_health()
+    except Exception:  # noqa: BLE001
+        return {"enabled": False, "loaded": False, "warehouse": None, "namespace": None}
+
+
 @router.get("/health")
 def health():
     return {
@@ -39,5 +48,6 @@ def health():
             "conformal": CONFORMAL_PATH.exists(),  # P1 (2026-04-14)
         },
         "vllm_url": VLLM_BASE_URL,
-        "feast": _feast_health(),  # P6-A (2026-04-15)
+        "feast": _feast_health(),         # P6-A (2026-04-15)
+        "iceberg": _iceberg_health(),     # P7-A (2026-04-15)
     }

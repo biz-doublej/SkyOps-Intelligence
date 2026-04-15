@@ -289,6 +289,17 @@ def main():
         # P6-G: dashboard fanout — best-effort, never blocks Kafka path
         _publish_to_redis(event)
 
+        # P7-A: Iceberg Bronze append — best-effort, no-op if [iceberg] missing
+        try:
+            from feature_store.iceberg_writer import write_bronze_event  # type: ignore
+            write_bronze_event(
+                "notam_raw",
+                notam_number=event.get("notam_id", ""),
+                payload=event,
+            )
+        except Exception:
+            pass
+
         for _ in range(INTERVAL_SEC):
             if stopping:
                 break

@@ -355,6 +355,17 @@ def main():
             except Exception:
                 pass
 
+            # P7-A: Iceberg Bronze append — best-effort
+            try:
+                from feature_store.iceberg_writer import write_bronze_event  # type: ignore
+                write_bronze_event(
+                    "notam_raw",
+                    notam_number=event.get("notam_id", ""),
+                    payload=event,
+                )
+            except Exception:
+                pass
+
             if count_received % 10 == 0:
                 logger.info(
                     f"📊 received={count_received} published={count_published} "

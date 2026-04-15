@@ -92,6 +92,21 @@ def predict_delay(req: DelayRequest) -> DelayResponse:
             interval = _apply_conformal(model, X_prep, pred)
 
     latency = (time.time() - t0) * 1000
+
+    # P7-A: Iceberg Gold inference log — best-effort, never blocks response
+    try:
+        import uuid
+        from feature_store.iceberg_writer import write_gold_inference_log  # type: ignore
+        write_gold_inference_log(
+            request_id=str(uuid.uuid4()),
+            model_version="2.1.1",
+            predicted_delay_min=round(pred, 1),
+            interval_lower=interval.lower_min if interval else None,
+            interval_upper=interval.upper_min if interval else None,
+        )
+    except Exception:
+        pass
+
     return DelayResponse(
         predicted_delay_min=round(pred, 1),
         is_delayed=pred >= 15.0,
