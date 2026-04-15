@@ -104,7 +104,17 @@
 - ✅ **ADR-003 Multi-region** (P7-G): `docs/adr/ADR-003-multi-region-deployment.md` — 4 옵션 비교, hybrid (KR primary write + EU/US read replica) 채택. GDPR/PIPA/ITAR data residency 고려. 5-phase migration plan, region별 SLO 정의. Status: Proposed (사용자 SaaS 출시 시점 review).
 - ✅ **Reproduction Guide v2** (P7-H): `docs/reproduction_guide.md` 419 → 564 라인. 아키텍처 다이어그램 v2 (Iceberg + Feast + Schema Registry + Marquez + 7 dashboard pages), v1→v2 비교 표 10 rows, P6/P7 stack quickstart + 프로덕션 k8s 절차 추가, troubleshooting 5종 추가.
 
-### P7 이연 → P8 후보 과제
+### P8 완료 (2026-04-15 ~ 16)
+- ✅ **Iceberg Silver writer + OpenLineage** (P8-A): `feature_engineering.py` → Silver sample write + OL START/COMPLETE. `/anomaly/feedback` + `/anomaly/approve` 가 Gold anomaly_decisions 에 기록.
+- ✅ **AvroProducer Schema Registry 실사용** (P8-B): `pipeline/avro_producer.py` — 기존 JSON producer 를 SerializingProducer + AvroSerializer + fastavro validation 로 자동 승격. `SCHEMA_REGISTRY_URL` 없으면 JSON fallback.
+- ✅ **NAS-optimized compose** (P8-C): `docker-compose.nas.yml` — vLLM 제외, 1.8GB RAM 총 budget. `LLM_MODE=fallback` — RAG retrieve 만 후 템플릿 응답.
+- ✅ **Helm Chart + Terraform** (P8-D): `k8s/helm/skyops/` Chart 0.1.0 + `values.{dev,staging,prod}.yaml`. `terraform/modules/skyops/` + `environments/{dev,staging,prod}/` 3세트. Secret rotation playbook.
+- ✅ **Evidence package** (P8-E): `docs/evidence/` — k6 load test (p95/p99 gates), Argo Rollouts recorder, Evidently drift demo (실행 검증 완료 — CRITICAL 4 columns), Grafana snapshot 가이드, Marquez lineage 가이드.
+- ✅ **A-CDM schema + audit log + HITL approval** (P8-F): `pipeline/schemas/acdm_milestone.avsc` (16 milestones), `serving/common/audit.py` (JSONL + OTel trace_id), `POST /anomaly/approve` (4 decisions + RBAC pattern).
+- ✅ **Image signing + SBOM** (P8-G): `.github/workflows/release.yml` — Sigstore cosign keyless + syft SBOM (SPDX+CycloneDX) + Trivy. `docs/runbooks/supply_chain.md` + Kyverno ClusterPolicy example.
+- ✅ **Incident playbook + DR drill** (P8-H): `docs/runbooks/incident_playbook.md` (P1~P4 severity + 6-step CRITICAL drill-down), `docs/runbooks/dr_drill.sh` (ADR-003 multi-region failover automation).
+
+### P8 이연 → P9 후보 과제
 
 1. ✅ **비행 단계(이륙/순항/접근/착륙)별 차등 임계값 적용 — 2026-04-14 P2 완료**
    - `pipeline/phase_classifier.py` heuristic FlightPhase classifier (7 phases + UNKNOWN)
