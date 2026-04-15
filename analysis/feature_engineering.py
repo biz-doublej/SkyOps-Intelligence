@@ -544,4 +544,47 @@ if __name__ == "__main__":
     print(f"\n✅ 저장 완료: {out_path} ({size_mb:.0f} MB)")
     print(f"   shape: {df_feat.shape}")
     print(f"   컬럼: {list(df_feat.columns)[:10]} ...")
+
+    # P8-A: Silver Iceberg tier + OpenLineage (best-effort, no-op when extras missing)
+    try:
+        import sys as _sys
+        from pathlib import Path as _Path
+        _sys.path.insert(0, str(_Path(__file__).resolve().parent.parent))
+        from feature_store.iceberg_writer import IcebergWriter  # type: ignore
+        from monitoring.lineage import emit_train_run_start, emit_train_run_complete  # type: ignore
+        # Only write a subsample head so Silver doesn't balloon for demo runs
+        sample_n = min(10000, len(df_feat))
+        cols = ["tail_number", "rotation_depth", "prev_leg_arr_delay_min",
+                "scheduled_turnaround_min", "actual_turnaround_min"]
+        keep = [c for c in cols if c in df_feat.columns]
+        if "tail_number" in keep and len(keep) >= 2:
+            import pandas as _pd
+            from datetime import datetime as _dt, timezone as _tz
+            sample = df_feat.sample(n=sample_n, random_state=42) if len(df_feat) > sample_n else df_feat
+            w = IcebergWriter("silver_flight_features", batch_size=500)
+            now_ts = _dt.now(_tz.utc).replace(tzinfo=None)
+            for _, row in sample.iterrows():
+                record = {"event_timestamp": now_ts}
+                for c in keep:
+                    v = row.get(c)
+                    record[c] = "" if _pd.isna(v) else str(v)
+                w.append(record)
+            n_flushed = w.flush()
+            print(f"   🗄️ Iceberg Silver: {n_flushed} rows → skyops.silver_flight_features")
+            # OpenLineage — emit input→output
+            ol_run_id = emit_train_run_start(
+                job_name="feature_engineering",
+                inputs=[("skyops.bronze_flight_position_raw", None)],
+            )
+            emit_train_run_complete(
+                run_id=ol_run_id,
+                job_name="feature_engineering",
+                outputs=[("skyops.silver_flight_features", None)],
+                model_version="features_v2",
+                metrics={"row_count": float(len(df_feat)),
+                         "silver_sampled": float(sample_n)},
+            )
+    except Exception as _e:
+        print(f"   ⚠️ Iceberg/OpenLineage integration skipped: {_e}")
+
     print("\n다음 단계: python analysis/prepare_dataset.py")

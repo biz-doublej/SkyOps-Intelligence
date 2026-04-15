@@ -1,0 +1,57 @@
+{
+  "type": "record",
+  "name": "ACDMMilestoneEvent",
+  "namespace": "com.skyops.events.v2",
+  "doc": "A-CDM 16-milestone progression (EUROCONTROL A-CDM + KAC ICCC). Tracks turn-around from ATC FPL Submission to Touchdown.",
+  "fields": [
+    { "name": "schema_version", "type": "string", "default": "2.0" },
+    { "name": "event_id", "type": "string" },
+    { "name": "event_timestamp", "type": { "type": "long", "logicalType": "timestamp-millis" } },
+    { "name": "ingested_at", "type": { "type": "long", "logicalType": "timestamp-millis" } },
+    { "name": "source", "type": {
+        "type": "enum", "name": "AcdmSource",
+        "symbols": ["KAC_ICCC", "EUROCONTROL_NM", "FAA_SWIM", "CDM_STATION", "MOCK"]
+    } },
+
+    { "name": "flight_id",   "type": "string", "doc": "Unique per leg (e.g. 'KE081-20260415-ICN-SFO')" },
+    { "name": "tail_number", "type": ["null", "string"], "default": null },
+    { "name": "origin_icao",      "type": ["null", "string"], "default": null },
+    { "name": "destination_icao", "type": ["null", "string"], "default": null },
+
+    { "name": "milestone", "type": {
+        "type": "enum", "name": "ACDMMilestone",
+        "symbols": [
+          "M01_FPL_SUBMISSION",
+          "M02_EOBT_MINUS_2H",
+          "M03_EOBT_MINUS_1H_TOBT",
+          "M04_EOBT_MINUS_40M_TSAT_CALC",
+          "M05_FINAL_TOBT_TSAT_PUBLISH",
+          "M06_AIRCRAFT_READINESS_OUT",
+          "M07_BOARDING_COMPLETE",
+          "M08_PUSHBACK_APPROVED",
+          "M09_PUSHBACK_INITIATED",
+          "M10_ENGINE_STARTUP",
+          "M11_TAXI_OUT",
+          "M12_TAKE_OFF",
+          "M13_TAKE_OFF_IN_AIR",
+          "M14_TOP_OF_CLIMB",
+          "M15_TOP_OF_DESCENT",
+          "M16_TOUCH_DOWN"
+        ]
+    } },
+    { "name": "sequence_number", "type": "int", "doc": "1..16 for ordering" },
+
+    { "name": "actual_time", "type": ["null", { "type": "long", "logicalType": "timestamp-millis" }], "default": null },
+    { "name": "planned_time", "type": ["null", { "type": "long", "logicalType": "timestamp-millis" }], "default": null },
+    { "name": "variance_sec", "type": ["null", "long"], "default": null, "doc": "actual - planned seconds" },
+
+    { "name": "stand_id",   "type": ["null", "string"], "default": null, "doc": "gate/stand identifier" },
+    { "name": "runway",     "type": ["null", "string"], "default": null },
+
+    { "name": "owner",      "type": [
+        "null",
+        { "type": "enum", "name": "MilestoneOwner",
+          "symbols": ["AIRLINE", "GROUND_HANDLER", "AIRPORT", "ATC", "CROSS"] }
+    ], "default": null }
+  ]
+}

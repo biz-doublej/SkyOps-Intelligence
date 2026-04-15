@@ -114,6 +114,29 @@ class AnomalyFeedbackResponse(BaseModel):
     file_path: str
 
 
+# P8-F · Human-in-the-loop approval for suggested mitigations
+class AnomalyApprovalRequest(BaseModel):
+    """Analyst endorses or overrides an LLM advisory.
+
+    Used when an LLM-proposed action (rerouting, hold-short, pax advisory)
+    needs human sign-off before being surfaced to ATC or broadcast.
+    """
+    alert_id: str = Field(..., description="Target AlertDecisionEvent.alert_id")
+    advisory_id: str = Field(..., description="LLM advisory correlation id")
+    decision: str = Field(..., description="approved | rejected | modified | deferred")
+    approver: str = Field(..., description="analyst user id (RBAC role required)")
+    modified_text: Optional[str] = Field(None, description="if decision=modified, the final text")
+    reason: Optional[str] = Field(None, description="approver's rationale")
+
+
+class AnomalyApprovalResponse(BaseModel):
+    recorded: bool
+    alert_id: str
+    advisory_id: str
+    decision: str
+    audit_trace_id: Optional[str] = None
+
+
 class AnomalyExplainRequest(BaseModel):
     """이상 이벤트를 LLM으로 자연어 설명."""
     icao24: str

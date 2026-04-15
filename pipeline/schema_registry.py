@@ -35,6 +35,7 @@ TOPIC_SCHEMA = {
     "notam":             "notam.avsc",
     "atfm-restriction":  "atfm_restriction.avsc",
     "alert-decision":    "alert_decision.avsc",
+    "acdm-milestone":    "acdm_milestone.avsc",  # P8-F (2026-04-15)
 }
 
 

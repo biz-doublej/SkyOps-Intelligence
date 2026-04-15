@@ -27,6 +27,8 @@ from common.model_store import ModelStore
 from common.models import (
     ActiveLearningItem,
     ActiveLearningQuery,
+    AnomalyApprovalRequest,
+    AnomalyApprovalResponse,
     AnomalyFeedbackRequest,
     AnomalyFeedbackResponse,
     AnomalyRequest,
@@ -142,6 +144,28 @@ def submit_anomaly_feedback(req: AnomalyFeedbackRequest) -> AnomalyFeedbackRespo
             f.write(_json.dumps(entry, ensure_ascii=False) + "\n")
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"피드백 저장 실패: {e}")
+
+    # P8-A: Gold anomaly_decisions Iceberg write + audit log
+    try:
+        from feature_store.iceberg_writer import write_gold_anomaly_decision  # type: ignore
+        write_gold_anomaly_decision(
+            alert_id=req.alert_id,
+            anomaly_type="unknown_from_feedback",
+            severity="unknown",
+            flight_phase=None,
+            analyst_label=req.label,
+        )
+    except Exception:
+        pass
+
+    # P8-F: structured audit log
+    try:
+        from common.audit import audit_log  # type: ignore
+        audit_log(event="anomaly_feedback_submitted",
+                  actor=req.labeled_by, resource=req.alert_id, outcome="saved",
+                  extra={"label": req.label})
+    except Exception:
+        pass
 
     return AnomalyFeedbackResponse(
         saved=True,
@@ -389,3 +413,72 @@ def _bandit_v2_select(items: list[ActiveLearningItem],
             break
 
     return selected[:top_k]
+
+
+# ── P8-F · Human-in-the-loop approval ────────────────────────────────
+VALID_DECISIONS = {"approved", "rejected", "modified", "deferred"}
+
+
+@router.post("/anomaly/approve", response_model=AnomalyApprovalResponse)
+def approve_advisory(req: AnomalyApprovalRequest) -> AnomalyApprovalResponse:
+    """Analyst decision on an LLM-generated advisory before broadcast.
+
+    Writes immutable audit entry + Iceberg Gold + optional reject → suppress.
+
+    Required flow for CRITICAL anomalies in production:
+        1. IF detects anomaly → /detect/anomaly returns AnomalyEvent
+        2. LLM generates advisory via /explain/anomaly
+        3. Dashboard shows advisory side-by-side with raw data
+        4. **Analyst clicks Approve/Reject** → this endpoint
+        5. Only approved advisories are pushed to ATC broadcast channel
+    """
+    if req.decision not in VALID_DECISIONS:
+        raise HTTPException(
+            status_code=400,
+            detail=f"decision must be one of {VALID_DECISIONS}",
+        )
+    if req.decision == "modified" and not req.modified_text:
+        raise HTTPException(
+            status_code=400,
+            detail="decision=modified requires modified_text",
+        )
+
+    trace_id = ""
+    try:
+        from common.audit import audit_log, _trace_id  # type: ignore
+        trace_id = _trace_id()
+        audit_log(
+            event="advisory_approval",
+            actor=req.approver,
+            resource=req.alert_id,
+            outcome=req.decision,
+            correlation_id=req.advisory_id,
+            extra={
+                "decision": req.decision,
+                "reason": req.reason,
+                "modified": bool(req.modified_text),
+            },
+        )
+    except Exception:
+        pass
+
+    # Gold Iceberg write
+    try:
+        from feature_store.iceberg_writer import write_gold_anomaly_decision  # type: ignore
+        write_gold_anomaly_decision(
+            alert_id=req.alert_id,
+            anomaly_type="advisory_gate",
+            severity="approval",
+            flight_phase=None,
+            analyst_label=f"{req.decision}|{req.approver}",
+        )
+    except Exception:
+        pass
+
+    return AnomalyApprovalResponse(
+        recorded=True,
+        alert_id=req.alert_id,
+        advisory_id=req.advisory_id,
+        decision=req.decision,
+        audit_trace_id=trace_id or None,
+    )
