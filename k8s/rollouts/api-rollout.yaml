@@ -1,0 +1,157 @@
+# SkyOps API — Argo Rollouts Canary Deployment (P7-F · 2026-04-15)
+# ============================================================================
+# Replaces the standard Deployment with a progressive canary:
+#   5%  (5min canary analysis)
+#   25% (5min)
+#   50% (5min)
+#   100% (auto-promote if all gates green)
+#
+# Analysis gates use Prometheus (P6-E):
+#   - http_5xx_rate < 1%
+#   - p95 latency < 500ms (delay endpoint)
+#
+# Prerequisite:
+#   helm repo add argo https://argoproj.github.io/argo-helm
+#   helm install argo-rollouts argo/argo-rollouts -n argo-rollouts --create-namespace
+#
+# Deploy:
+#   kubectl apply -f k8s/rollouts/
+#
+# Promote / Abort:
+#   kubectl argo rollouts promote skyops-api -n skyops
+#   kubectl argo rollouts abort   skyops-api -n skyops
+#   kubectl argo rollouts dashboard
+
+apiVersion: argoproj.io/v1alpha1
+kind: Rollout
+metadata:
+  name: skyops-api
+  namespace: skyops
+  labels:
+    app: skyops-api
+    component: api
+spec:
+  replicas: 4
+  revisionHistoryLimit: 5
+  selector:
+    matchLabels:
+      app: skyops-api
+  strategy:
+    canary:
+      canaryService:  skyops-api-canary    # selects rollout pods-template-hash=canary
+      stableService:  skyops-api           # selects pods-template-hash=stable
+      trafficRouting:
+        nginx:
+          stableIngress: skyops-ingress
+      analysis:
+        templates:
+          - templateName: api-success-rate
+          - templateName: api-latency-p95
+        startingStep: 1   # skip analysis on first 5%, run from 25%
+        args:
+          - name: service-name
+            value: skyops-api-canary
+      steps:
+        - setWeight: 5
+        - pause: { duration: 5m }
+        - setWeight: 25
+        - pause: { duration: 5m }
+        - setWeight: 50
+        - pause: { duration: 5m }
+        - setWeight: 100
+  template:
+    metadata:
+      labels:
+        app: skyops-api
+        component: api
+      annotations:
+        prometheus.io/scrape: "true"
+        prometheus.io/port: "8000"
+        prometheus.io/path: "/metrics"
+    spec:
+      # P7-F: Pod Security Standards "restricted" profile compliance
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 10001
+        runAsGroup: 10001
+        fsGroup: 10001
+        seccompProfile:
+          type: RuntimeDefault
+      containers:
+        - name: api
+          image: skyops/api:2.1.1
+          imagePullPolicy: IfNotPresent
+          ports:
+            - containerPort: 8000
+              name: http
+          envFrom:
+            - configMapRef:
+                name: skyops-config
+          resources:
+            requests:
+              cpu: "500m"
+              memory: "1Gi"
+            limits:
+              cpu: "2000m"
+              memory: "4Gi"
+          # P7-F: Container security
+          securityContext:
+            allowPrivilegeEscalation: false
+            readOnlyRootFilesystem: true
+            capabilities:
+              drop: ["ALL"]
+          volumeMounts:
+            - name: models
+              mountPath: /app/data/models
+              readOnly: true
+            - name: vectordb
+              mountPath: /app/data/vectordb
+              readOnly: true
+            - name: tmp
+              mountPath: /tmp
+            - name: cache
+              mountPath: /app/.cache
+          livenessProbe:
+            httpGet:
+              path: /health
+              port: http
+            initialDelaySeconds: 30
+            periodSeconds: 30
+          readinessProbe:
+            httpGet:
+              path: /health
+              port: http
+            initialDelaySeconds: 10
+            periodSeconds: 10
+          startupProbe:
+            httpGet:
+              path: /health
+              port: http
+            failureThreshold: 30
+            periodSeconds: 5
+      volumes:
+        - name: models
+          persistentVolumeClaim:
+            claimName: skyops-models-pvc
+        - name: vectordb
+          persistentVolumeClaim:
+            claimName: skyops-vectordb-pvc
+        - name: tmp
+          emptyDir: { sizeLimit: 256Mi }
+        - name: cache
+          emptyDir: { sizeLimit: 512Mi }
+---
+# Canary service (Argo Rollouts updates pods-template-hash selector live)
+apiVersion: v1
+kind: Service
+metadata:
+  name: skyops-api-canary
+  namespace: skyops
+spec:
+  type: ClusterIP
+  selector:
+    app: skyops-api
+  ports:
+    - name: http
+      port: 8000
+      targetPort: http

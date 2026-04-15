@@ -1,0 +1,162 @@
+# SkyOps NetworkPolicy bundle (P7-F · 2026-04-15)
+# ============================================================================
+# Default-deny + explicit allow for every cross-pod traffic.
+# Zero-trust within cluster — even sidecar agents need explicit rules.
+#
+# Apply:
+#   kubectl apply -f k8s/security/network-policies.yaml
+#
+# Verify:
+#   kubectl get netpol -n skyops
+#   kubectl describe netpol skyops-api-allow -n skyops
+
+# Default deny all ingress + egress
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: default-deny-all
+  namespace: skyops
+spec:
+  podSelector: {}
+  policyTypes: [Ingress, Egress]
+---
+# API can be reached by Traefik (ingress namespace) and by dashboard pods
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: skyops-api-allow
+  namespace: skyops
+spec:
+  podSelector:
+    matchLabels:
+      app: skyops-api
+  policyTypes: [Ingress, Egress]
+  ingress:
+    # From Traefik ingress namespace
+    - from:
+        - namespaceSelector:
+            matchLabels:
+              kubernetes.io/metadata.name: traefik-system
+      ports:
+        - port: 8000
+          protocol: TCP
+    # From dashboard pods
+    - from:
+        - podSelector:
+            matchLabels:
+              app: skyops-dashboard
+      ports:
+        - port: 8000
+          protocol: TCP
+    # From Prometheus scraper
+    - from:
+        - namespaceSelector:
+            matchLabels:
+              kubernetes.io/metadata.name: monitoring
+        - podSelector:
+            matchLabels:
+              app: prometheus
+      ports:
+        - port: 8000
+          protocol: TCP
+  egress:
+    # Redis cache
+    - to:
+        - podSelector:
+            matchLabels:
+              app: redis
+      ports:
+        - port: 6379
+          protocol: TCP
+    # vLLM inference (optional)
+    - to:
+        - podSelector:
+            matchLabels:
+              app: vllm
+      ports:
+        - port: 8001
+          protocol: TCP
+    # OTel collector
+    - to:
+        - namespaceSelector:
+            matchLabels:
+              kubernetes.io/metadata.name: monitoring
+        - podSelector:
+            matchLabels:
+              app: otel-collector
+      ports:
+        - port: 4317
+          protocol: TCP
+    # DNS (kube-system)
+    - to:
+        - namespaceSelector:
+            matchLabels:
+              kubernetes.io/metadata.name: kube-system
+      ports:
+        - port: 53
+          protocol: UDP
+        - port: 53
+          protocol: TCP
+---
+# Dashboard egress: API only
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: skyops-dashboard-allow
+  namespace: skyops
+spec:
+  podSelector:
+    matchLabels:
+      app: skyops-dashboard
+  policyTypes: [Ingress, Egress]
+  ingress:
+    - from:
+        - namespaceSelector:
+            matchLabels:
+              kubernetes.io/metadata.name: traefik-system
+      ports:
+        - port: 3000
+          protocol: TCP
+  egress:
+    - to:
+        - podSelector:
+            matchLabels:
+              app: skyops-api
+      ports:
+        - port: 8000
+          protocol: TCP
+    - to:
+        - namespaceSelector:
+            matchLabels:
+              kubernetes.io/metadata.name: kube-system
+      ports:
+        - port: 53
+          protocol: UDP
+---
+# Redis: ingress only from API; no egress except DNS
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: skyops-redis-allow
+  namespace: skyops
+spec:
+  podSelector:
+    matchLabels:
+      app: redis
+  policyTypes: [Ingress, Egress]
+  ingress:
+    - from:
+        - podSelector:
+            matchLabels:
+              app: skyops-api
+      ports:
+        - port: 6379
+          protocol: TCP
+  egress:
+    - to:
+        - namespaceSelector:
+            matchLabels:
+              kubernetes.io/metadata.name: kube-system
+      ports:
+        - port: 53
+          protocol: UDP

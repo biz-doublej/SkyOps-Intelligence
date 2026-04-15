@@ -1,0 +1,33 @@
+# SkyOps namespace with Pod Security Admission labels (P7-F · 2026-04-15)
+# ============================================================================
+# Promotes the existing skyops namespace from default ("privileged" implicit)
+# to "restricted" — the strictest Kubernetes-built-in profile.
+#
+# Effects:
+#  - all pods MUST runAsNonRoot
+#  - capabilities must drop ALL
+#  - hostNetwork / hostPID / hostIPC forbidden
+#  - allowPrivilegeEscalation must be false
+#  - seccompProfile must be RuntimeDefault or Localhost
+#  - readOnlyRootFilesystem strongly recommended (warned)
+#
+# Pre-existing manifests already comply via the api-rollout.yaml (P7-F).
+# Apply with:
+#   kubectl apply -f k8s/security/namespace-psa.yaml
+#
+# To preview violations on existing pods:
+#   kubectl label namespace skyops pod-security.kubernetes.io/audit=restricted
+
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: skyops
+  labels:
+    app: skyops
+    env: prod
+    # Pod Security Admission — enforce restricted profile
+    pod-security.kubernetes.io/enforce: restricted
+    pod-security.kubernetes.io/enforce-version: latest
+    # Audit + warn at the same level so violations are visible
+    pod-security.kubernetes.io/audit: restricted
+    pod-security.kubernetes.io/warn: restricted

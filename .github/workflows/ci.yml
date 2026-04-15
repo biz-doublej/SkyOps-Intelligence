@@ -84,6 +84,7 @@ jobs:
           context: .
           file: Dockerfile.api
           push: false
+          load: true                    # P7-F: load to local docker so Trivy can scan
           tags: skyops/api:ci-${{ github.sha }}
           cache-from: type=gha,scope=api
           cache-to: type=gha,scope=api,mode=max
@@ -93,9 +94,27 @@ jobs:
           context: .
           file: Dockerfile.dashboard
           push: false
+          load: true
           tags: skyops/dashboard:ci-${{ github.sha }}
           cache-from: type=gha,scope=dashboard
           cache-to: type=gha,scope=dashboard,mode=max
+      # P7-F: container security scan
+      - name: Trivy scan API image (CRITICAL/HIGH only)
+        uses: aquasecurity/trivy-action@master
+        with:
+          image-ref: skyops/api:ci-${{ github.sha }}
+          severity: CRITICAL,HIGH
+          ignore-unfixed: true
+          exit-code: '1'
+          format: table
+      - name: Trivy scan Dashboard image
+        uses: aquasecurity/trivy-action@master
+        with:
+          image-ref: skyops/dashboard:ci-${{ github.sha }}
+          severity: CRITICAL,HIGH
+          ignore-unfixed: true
+          exit-code: '1'
+          format: table
 
   # ── Kubernetes manifest validation ────────────────────────────────
   k8s-validate:

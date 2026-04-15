@@ -1,0 +1,64 @@
+# SkyOps Argo Rollouts Analysis Templates (P7-F · 2026-04-15)
+# ============================================================================
+# These templates query Prometheus (P6-E) and gate canary promotion on:
+#   - HTTP 5xx error rate < 1%
+#   - p95 latency < 500ms (delay endpoint)
+#
+# Both are evaluated every 30s for 5 measurements (= 2.5min). All must pass.
+
+apiVersion: argoproj.io/v1alpha1
+kind: AnalysisTemplate
+metadata:
+  name: api-success-rate
+  namespace: skyops
+spec:
+  args:
+    - name: service-name
+  metrics:
+    - name: success-rate
+      interval: 30s
+      count: 5
+      successCondition: result[0] >= 0.99
+      failureLimit: 1
+      provider:
+        prometheus:
+          address: http://prometheus.skyops:9090
+          query: |
+            sum(rate(http_requests_total{
+              job="skyops-api",
+              service="{{args.service-name}}",
+              status!~"5.."
+            }[2m]))
+            /
+            sum(rate(http_requests_total{
+              job="skyops-api",
+              service="{{args.service-name}}"
+            }[2m]))
+---
+apiVersion: argoproj.io/v1alpha1
+kind: AnalysisTemplate
+metadata:
+  name: api-latency-p95
+  namespace: skyops
+spec:
+  args:
+    - name: service-name
+  metrics:
+    - name: latency-p95-seconds
+      interval: 30s
+      count: 5
+      successCondition: result[0] <= 0.5
+      failureLimit: 1
+      provider:
+        prometheus:
+          address: http://prometheus.skyops:9090
+          query: |
+            histogram_quantile(0.95,
+              sum by (le) (
+                rate(http_request_duration_seconds_bucket{
+                  job="skyops-api",
+                  service="{{args.service-name}}",
+                  handler="/predict/delay"
+                }[2m])
+              )
+            )
