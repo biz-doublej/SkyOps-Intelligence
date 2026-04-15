@@ -162,9 +162,63 @@ def build_mock_event(scenario: dict) -> dict:
 
 
 # ── Main loop ──────────────────────────────────────────────────────────
+def _kac_loop(producer) -> None:
+    """P7-E: KAC public-data ACDM source.
+
+    Polls /StatusOfPassengerFlights every INTERVAL_SEC, derives ATFMRestrictionEvent
+    from delay aggregates, publishes to Kafka.
+    """
+    from pipeline.kac_acdm_client import (
+        derive_restrictions_from_delays, fetch_recent_delays, health,
+    )
+
+    h = health()
+    if not h["configured"]:
+        logger.warning("KAC_API_KEY 미설정 → mock fallback")
+        return _mock_loop(producer)
+
+    logger.info(f"⚙️  ATFM producer (mode=kac, airport={h['default_airport']}) → topic={TOPIC}")
+    count = 0
+    while True:
+        try:
+            delays = fetch_recent_delays(h["default_airport"])
+            restrictions = derive_restrictions_from_delays(delays, h["default_airport"])
+            for r in restrictions:
+                fut = producer.send(TOPIC, key=r["restriction_id"], value=r)
+                fut.get(timeout=10)
+                count += 1
+                logger.info(f"📤 [{count}] KAC-derived {r['restriction_type']:8s} "
+                            f"reason={r['reason']:8s} avg_delay={r['expected_delay_min']}m")
+        except Exception as e:
+            logger.error(f"KAC loop iteration failed: {e}")
+        time.sleep(INTERVAL_SEC)
+
+
+def _mock_loop(producer) -> None:
+    """Original mock loop — kept verbatim."""
+    logger.info(f"⚙️  ATFM producer (mode=mock) → topic={TOPIC}, interval={INTERVAL_SEC}s")
+    count = 0
+    while True:
+        scenario = random.choice(MOCK_SCENARIOS)
+        event = build_mock_event(scenario)
+        try:
+            fut = producer.send(TOPIC, key=event["restriction_id"], value=event)
+            fut.get(timeout=10)
+            count += 1
+            logger.info(
+                f"📤 [{count}] {event['restriction_type']:25s} {event['initiative_name'][:50]:50s} "
+                f"duration={event['expected_duration_min']:3d}m "
+                f"delay={event['delay_expectation_min']:3d}m"
+            )
+        except Exception as e:
+            logger.error(f"Kafka send failed: {e}")
+        time.sleep(INTERVAL_SEC)
+
+
 def main():
-    if MODE != "mock":
-        logger.error(f"ATFM_MODE={MODE} 미지원. 'mock'만 지원 (P5에서 'api' 추가 예정).")
+    valid_modes = ("mock", "kac")
+    if MODE not in valid_modes:
+        logger.error(f"ATFM_MODE={MODE} 미지원. 가능: {valid_modes}.")
         sys.exit(1)
 
     producer = make_kafka_producer()
@@ -182,6 +236,15 @@ def main():
     except AttributeError:
         pass  # Windows
 
+    # P7-E: dispatch
+    if MODE == "kac":
+        try:
+            _kac_loop(producer)
+        except KeyboardInterrupt:
+            stopping = True
+        return
+
+    # mock mode
     logger.info(f"⚙️  ATFM producer (mode={MODE}) → topic={TOPIC}, interval={INTERVAL_SEC}s")
     count = 0
     while not stopping:
