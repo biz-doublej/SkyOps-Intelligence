@@ -204,16 +204,21 @@ def _uncertainty_score(
 
 
 @router.get("/active-learning/next", response_model=ActiveLearningQuery)
-def get_next_items_for_labeling(top_k: int = 10):
-    """분석가 라벨링 우선순위 queue (P4+ · 2026-04-15).
+def get_next_items_for_labeling(top_k: int = 10, strategy: str = "uncertainty_v1"):
+    """분석가 라벨링 우선순위 queue.
 
-    Strategy: uncertainty sampling v1
-    - Redis `skyops:anomaly:stream` 에서 최근 이벤트 조회
-    - 이미 labeled된 alert_id는 제외 (feedback.jsonl)
-    - uncertainty_score = f(|anomaly_score - threshold|, severity)
-    - 상위 K개 반환
+    strategy = "uncertainty_v1" (default, P4+):
+      uncertainty_score = f(|anomaly_score - threshold|, severity)
+      → top-K by uncertainty descending
 
-    Redis 미가용 시 empty list + total_pending=0 반환 (graceful degradation).
+    strategy = "bandit_v2" (P7-C, Thompson sampling + diversity):
+      per anomaly_type bucket, sample exploitation reward from Beta(α,β)
+      where α = 1 + true_positives, β = 1 + false_positives in feedback.
+      Then ε-greedy diversify across phases so analyst doesn't get
+      8 items all from CRUISE.
+
+      Goal: balance "label what we're unsure about" vs "label types we
+      haven't seen enough of yet".
     """
     generated_at = datetime.now(timezone.utc).isoformat()
     labeled = _load_labeled_alert_ids()
@@ -272,14 +277,115 @@ def get_next_items_for_labeling(top_k: int = 10):
             uncertainty_score=uncertainty,
         ))
 
-    # 정렬 + top_k
-    items.sort(key=lambda x: x.uncertainty_score, reverse=True)
-    top = items[:max(1, top_k)]
+    # ── Strategy dispatch ───────────────────────────────────────────
+    if strategy == "bandit_v2":
+        top = _bandit_v2_select(items, top_k=top_k, labeled_records=_load_labeled_records())
+        strat_name = "bandit_v2_thompson_diversity"
+    else:
+        # default: uncertainty v1
+        items.sort(key=lambda x: x.uncertainty_score, reverse=True)
+        top = items[:max(1, top_k)]
+        strat_name = "uncertainty_sampling_v1"
 
     return ActiveLearningQuery(
         items=top,
         total_pending=total_pending,
         returned_count=len(top),
-        query_strategy="uncertainty_sampling_v1",
+        query_strategy=strat_name,
         generated_at=generated_at,
     )
+
+
+# ── P7-C · Bandit v2 helpers ──────────────────────────────────────────
+def _load_labeled_records() -> list[dict]:
+    """Read full feedback.jsonl rows (not just IDs) for bandit prior."""
+    if not FEEDBACK_FILE.exists():
+        return []
+    out: list[dict] = []
+    try:
+        for line in FEEDBACK_FILE.read_text(encoding="utf-8").splitlines():
+            line = line.strip()
+            if not line:
+                continue
+            try:
+                out.append(_json.loads(line))
+            except Exception:
+                continue
+    except Exception:
+        pass
+    return out
+
+
+def _thompson_sample(alpha: float, beta: float) -> float:
+    """Sample from Beta(α, β) — Thompson posterior sample for TP probability.
+
+    Higher = expected to be a true positive; lower = likely FP.
+    For active learning, we want HIGH expected uncertainty AND
+    types where we're uncertain of the TP rate.
+    """
+    import random
+    # Beta sampling via gamma quotient (avoids numpy dependency in serving hot path)
+    x = random.gammavariate(max(alpha, 1e-6), 1.0)
+    y = random.gammavariate(max(beta, 1e-6), 1.0)
+    return x / (x + y) if (x + y) > 0 else 0.5
+
+
+def _bandit_v2_select(items: list[ActiveLearningItem],
+                       top_k: int,
+                       labeled_records: list[dict]) -> list[ActiveLearningItem]:
+    """Bandit + diversity pick.
+
+    Algorithm:
+      1. Group candidates by anomaly_type
+      2. For each type, compute Beta(1+TP, 1+FP) from labeled feedback,
+         then Thompson sample → posterior_uncertainty = 1 - |0.5 - sample|*2
+      3. Composite score = uncertainty_score * posterior_uncertainty
+      4. Round-robin across (type, phase) buckets to enforce diversity
+    """
+    from collections import defaultdict
+
+    # Per-type TP/FP counts from feedback (assumes feedback row has anomaly_type)
+    counts: dict[str, dict] = defaultdict(lambda: {"tp": 0, "fp": 0})
+    for r in labeled_records:
+        atype = r.get("anomaly_type") or "UNKNOWN"
+        label = (r.get("label") or "").lower()
+        if label == "true_positive":
+            counts[atype]["tp"] += 1
+        elif label == "false_positive":
+            counts[atype]["fp"] += 1
+
+    # Composite score
+    for it in items:
+        c = counts.get(it.anomaly_type, {"tp": 0, "fp": 0})
+        sample = _thompson_sample(1 + c["tp"], 1 + c["fp"])
+        # Closer to 0.5 → more uncertain about TP rate → higher pick weight
+        posterior_uncertainty = 1.0 - abs(sample - 0.5) * 2.0
+        it.uncertainty_score = float(min(1.0,
+            it.uncertainty_score * 0.6 + posterior_uncertainty * 0.4))
+
+    # Group by (type, phase) for diversification
+    buckets: dict[tuple[str, str], list[ActiveLearningItem]] = defaultdict(list)
+    for it in items:
+        buckets[(it.anomaly_type, it.flight_phase or "UNKNOWN")].append(it)
+    for arr in buckets.values():
+        arr.sort(key=lambda x: x.uncertainty_score, reverse=True)
+
+    # Round-robin pick
+    selected: list[ActiveLearningItem] = []
+    bucket_keys = sorted(buckets.keys(),
+                         key=lambda k: (buckets[k][0].uncertainty_score if buckets[k] else 0),
+                         reverse=True)
+    while len(selected) < top_k and bucket_keys:
+        any_picked = False
+        for k in list(bucket_keys):
+            if buckets[k]:
+                selected.append(buckets[k].pop(0))
+                any_picked = True
+                if len(selected) >= top_k:
+                    break
+            else:
+                bucket_keys.remove(k)
+        if not any_picked:
+            break
+
+    return selected[:top_k]
