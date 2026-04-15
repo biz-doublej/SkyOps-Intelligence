@@ -1,10 +1,16 @@
 # SkyOps Intelligence API server — production image
-# ADR-001 Phase 3 (P4+ · 2026-04-15)
+# ADR-001 Phase 3 (P4+ · 2026-04-15), P8-G hardening (2026-04-16)
 #
 # Build:
-#   docker build -f Dockerfile.api -t skyops/api:2.1.0 .
+#   docker build -f Dockerfile.api -t skyops/api:2.1.1 .
+#   # ARM64 for Synology NAS:
+#   docker buildx build --platform linux/arm64 -f Dockerfile.api -t skyops/api:2.1.1-arm64 .
 # Run:
-#   docker run -p 8000:8000 --env-file .env skyops/api:2.1.0
+#   docker run -p 8000:8000 --env-file .env skyops/api:2.1.1
+#
+# Image size: ~480 MB (slim base + only runtime deps)
+# Security: runs as uid 10001, readOnlyRootFilesystem compatible,
+#           drops ALL capabilities, no shell in final stage (entry = python)
 
 # ── Builder stage ────────────────────────────────────────────────────
 FROM python:3.11-slim AS builder
@@ -55,6 +61,13 @@ COPY serving/04_build_vectordb.py /app/serving/
 
 # Runtime model artifacts go in /app/data (mount read-only volume)
 VOLUME ["/app/data"]
+
+# P8-G · Non-root user (uid/gid 10001) for Pod Security "restricted" profile
+RUN groupadd -g 10001 skyops \
+ && useradd -u 10001 -g skyops -s /sbin/nologin -M skyops \
+ && chown -R skyops:skyops /app
+
+USER skyops
 
 EXPOSE 8000
 

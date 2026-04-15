@@ -158,6 +158,54 @@ def up() -> int:
     return rc
 
 
+def nas_up() -> int:
+    """Launch NAS-optimized low-memory stack (no vLLM, 1.8GB total)."""
+    rc = sh("docker compose -f docker-compose.nas.yml up -d")
+    if rc == 0:
+        print("\n  API:       http://<NAS-IP>:8000/docs")
+        print("  Dashboard: http://<NAS-IP>:3000")
+        print("  Grafana:   http://<NAS-IP>:3001  (admin/skyops)")
+    return rc
+
+
+def nas_down() -> int:
+    return sh("docker compose -f docker-compose.nas.yml down")
+
+
+def nas_logs() -> int:
+    return sh("docker compose -f docker-compose.nas.yml logs -f --tail 100")
+
+
+def evidence_drift() -> int:
+    """Generate drift alert evidence bundle."""
+    return sh(f'"{PYTHON}" docs/evidence/drift_alert/evidently_drift_demo.py')
+
+
+def evidence_load() -> int:
+    """Run k6 load test (requires k6 installed)."""
+    return sh("k6 run docs/evidence/load_test/k6_delay_prediction.js")
+
+
+def dr_drill() -> int:
+    """Run DR drill (local mode, dry-run)."""
+    return sh("bash docs/runbooks/dr_drill.sh local --dry-run")
+
+
+def helm_lint() -> int:
+    """Helm chart syntax check per environment."""
+    rc = 0
+    for env in ["dev", "staging", "prod"]:
+        r = sh(f"helm lint k8s/helm/skyops -f k8s/helm/skyops/values.{env}.yaml")
+        if r != 0:
+            rc = r
+    return rc
+
+
+def helm_template_dev() -> int:
+    """Render Helm templates for dev env (dry-run)."""
+    return sh("helm template skyops k8s/helm/skyops -f k8s/helm/skyops/values.dev.yaml")
+
+
 def up_prod() -> int:
     rc = sh("docker compose -f docker-compose.prod.yml up -d")
     if rc == 0:
@@ -299,6 +347,15 @@ TARGETS: dict[str, tuple[Callable[[], int], str]] = {
     "schema-up":         (schema_up,         "+schema profile"),
     "down":              (down,              "Stop everything"),
     "k8s-smoke":         (k8s_smoke,         "kubectl apply local Redis smoke"),
+    # P8 · NAS + IaC + evidence
+    "nas-up":            (nas_up,            "P8-C: low-memory NAS stack up"),
+    "nas-down":          (nas_down,          "P8-C: NAS stack down"),
+    "nas-logs":          (nas_logs,          "P8-C: NAS stack logs -f"),
+    "helm-lint":         (helm_lint,         "P8-D: helm lint all envs (dev/staging/prod)"),
+    "helm-template-dev": (helm_template_dev, "P8-D: helm template for dev (dry-run)"),
+    "evidence-drift":    (evidence_drift,    "P8-E: drift alert demo"),
+    "evidence-load":     (evidence_load,     "P8-E: k6 load test (needs k6)"),
+    "dr-drill":          (dr_drill,          "P8-H: DR drill local dry-run"),
     # Streaming
     "opensky":           (opensky,           "OpenSky ADS-B producer"),
     "metar":             (metar,             "NOAA/KMA METAR producer"),
