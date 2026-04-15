@@ -125,6 +125,7 @@ skyops-feast-materialize = "feature_store.materialize:main"
 skyops-iceberg-init = "feature_store.iceberg_bootstrap:main"
 skyops-schema-registry = "pipeline.schema_registry:main"
 skyops-active-retrain = "analysis.active_learning_retrain:main"
+skyops-korean-corpus = "llm_data.generate_korean_aviation_corpus:main"
 
 [project.urls]
 Repository = "https://github.com/biz-doublej/SkyOps-Intelligence"

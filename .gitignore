@@ -101,3 +101,7 @@ terraform.tfvars
 # ── LLM fine-tuning artifacts ─────────────────────────────
 data/models/llm/
 mlruns/
+
+# ── P7-D · Generated Korean SFT/DPO data (regenerable from script) ──
+data/alpaca/korean_aviation_sft.jsonl
+data/alpaca/korean_aviation_dpo.jsonl
