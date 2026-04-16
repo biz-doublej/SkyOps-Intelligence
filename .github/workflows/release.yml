@@ -23,12 +23,12 @@ jobs:
       fail-fast: false      # dashboard Trivy failure 가 api build 를 cancel 하지 않도록
       matrix:
         include:
-          # API: Python 이라 QEMU 에뮬레이션도 합리적 속도. 멀티아키로 배포.
+          # 두 이미지 모두 amd64 전용. 실 배포 타겟 (Synology DSM, GCP GKE)이 모두 x86 이고
+          # arm64 QEMU 에뮬레이션 빌드가 비용·시간 대비 이득이 없어 제거 (2026-04-17).
+          # API: 이전 37 분 → 5 분 이하 단축.
+          # Dashboard: Next.js 16 Rust/Webpack 은 QEMU 에서 3 시간+ 행 이슈.
           - component: api
-            platforms: linux/amd64,linux/arm64
-          # Dashboard: Next.js 16 + Rust/Webpack 빌드가 arm64 QEMU 에서 10~15배 느려
-          # 3시간 넘게 매달리는 사례가 확인돼 amd64 전용으로 제한.
-          # Synology DSM·GCP GKE 모두 amd64 라 실 배포엔 영향 없음.
+            platforms: linux/amd64
           - component: dashboard
             platforms: linux/amd64
     steps:
