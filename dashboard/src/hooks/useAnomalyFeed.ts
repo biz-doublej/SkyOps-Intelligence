@@ -4,9 +4,9 @@ import useSWR from "swr";
 import type { AnomalyEvent } from "@/lib/types";
 import { apiFetch } from "@/lib/api";
 import { generateMockAnomalies } from "@/lib/mockData";
+import { getWsOrigin } from "@/lib/ws";
 import { useWebSocket } from "./useWebSocket";
 
-const WS_URL = process.env.NEXT_PUBLIC_WS_URL || "ws://localhost:8000";
 const MAX_EVENTS = 100;
 
 export function useAnomalyFeed() {
@@ -25,7 +25,7 @@ export function useAnomalyFeed() {
   }, []);
 
   const { connected } = useWebSocket({
-    url: `${WS_URL}/ws/anomalies`,
+    url: `${getWsOrigin()}/ws/anomalies`,
     onMessage,
   });
 

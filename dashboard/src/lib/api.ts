@@ -1,4 +1,6 @@
-const API_URL = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000";
+// Default: /api — same-origin path handled by Next.js rewrites → api:8000.
+// Works for both LAN IP access and Cloudflare tunnel (no DNS or CORS).
+const API_URL = process.env.NEXT_PUBLIC_API_URL || "/api";
 
 export async function apiFetch<T>(
   path: string,

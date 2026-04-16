@@ -3,9 +3,9 @@ import { useState, useCallback, useEffect } from "react";
 import useSWR from "swr";
 import type { NotamItem, NotamStats } from "@/lib/types";
 import { apiFetch } from "@/lib/api";
+import { getWsOrigin } from "@/lib/ws";
 import { useWebSocket } from "./useWebSocket";
 
-const WS_URL = process.env.NEXT_PUBLIC_WS_URL || "ws://localhost:8000";
 const MAX_NOTAMS = 200;
 
 const MOCK_NOTAMS: NotamItem[] = [
@@ -91,7 +91,7 @@ export function useNotamFeed(filters?: {
   }, []);
 
   const { connected } = useWebSocket({
-    url: `${WS_URL}/ws/notams`,
+    url: `${getWsOrigin()}/ws/notams`,
     onMessage,
   });
 

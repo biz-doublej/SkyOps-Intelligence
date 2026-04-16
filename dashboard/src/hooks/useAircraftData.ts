@@ -4,9 +4,8 @@ import useSWR from "swr";
 import type { AircraftState } from "@/lib/types";
 import { apiFetch } from "@/lib/api";
 import { generateMockAircraft } from "@/lib/mockData";
+import { getWsOrigin } from "@/lib/ws";
 import { useWebSocket } from "./useWebSocket";
-
-const WS_URL = process.env.NEXT_PUBLIC_WS_URL || "ws://localhost:8000";
 
 export function useAircraftData() {
   const [aircraft, setAircraft] = useState<AircraftState[]>([]);
@@ -26,7 +25,7 @@ export function useAircraftData() {
   }, []);
 
   const { connected } = useWebSocket({
-    url: `${WS_URL}/ws/aircraft`,
+    url: `${getWsOrigin()}/ws/aircraft`,
     onMessage,
   });
 
