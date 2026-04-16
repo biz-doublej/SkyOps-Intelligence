@@ -31,9 +31,13 @@ dependencies = [
 
 [project.optional-dependencies]
 # Serving — XGBoost + Isolation Forest + MAPIE + ChromaDB
+#
+# ⚠️ scikit-learn 1.6.1 로 pickle 된 pipeline 이 1.7+ 에서 load 될 때
+#    'SimpleImputer' object has no attribute '_fill_dtype' AttributeError 발생.
+#    학습 환경과 서빙 환경을 동일 마이너 버전으로 고정 (2026-04-17 v2.1.5 수정).
 serving = [
     "xgboost>=2.0.0",
-    "scikit-learn>=1.4.0",
+    "scikit-learn==1.6.1",
     "mapie>=0.9.0",
     "chromadb>=0.5.0",
     "sentence-transformers>=3.0.0",
