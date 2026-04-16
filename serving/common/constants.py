@@ -74,4 +74,4 @@ REDIS_ANOMALY_DEBOUNCE = "skyops:anomaly:debounce:{}:{}"   # P2 (2026-04-14)
 REDIS_NOTAM_STREAM = "skyops:notam:stream"                 # P6-G (2026-04-15)
 
 # Version
-API_VERSION = "2.1.6"  # 2026-04-17 — HF cache dir fix + /explain fallback mode
+API_VERSION = "2.1.7"  # 2026-04-17 — RAG_RETRIEVE_DISABLED + canned topics for NAS demo
