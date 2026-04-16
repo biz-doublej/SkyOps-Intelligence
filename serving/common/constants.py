@@ -9,8 +9,16 @@ import os
 from pathlib import Path
 
 # ── Paths ─────────────────────────────────────────────────────────────
-PROJECT_ROOT = Path(__file__).resolve().parent.parent.parent
-DATA_DIR = PROJECT_ROOT / "data"
+# P4+ Packaging 이후 `serving` 이 site-packages 로 install 되는 경우
+# `Path(__file__).parent.parent.parent` 가 site-packages 루트를 가리켜
+# `/usr/local/lib/python3.11/site-packages/data/models/...` 같은
+# 엉뚱한 곳을 찾게 된다 (2026-04-17 v2.1.4 수정).
+#
+# 컨테이너/운영 환경에서는 SKYOPS_DATA_DIR 환경변수로 데이터 루트를
+# 명시 주입하고, 로컬 개발에서는 기존 리포 상대경로를 유지한다.
+_DEFAULT_DATA_DIR = Path(__file__).resolve().parent.parent.parent / "data"
+DATA_DIR = Path(os.getenv("SKYOPS_DATA_DIR") or _DEFAULT_DATA_DIR).resolve()
+PROJECT_ROOT = DATA_DIR.parent  # 하위 호환
 MODELS_DIR = DATA_DIR / "models"
 XGB_MODEL_PATH = MODELS_DIR / "xgboost_best.pkl"
 IF_MODEL_PATH = MODELS_DIR / "isolation_forest.pkl"
@@ -66,4 +74,4 @@ REDIS_ANOMALY_DEBOUNCE = "skyops:anomaly:debounce:{}:{}"   # P2 (2026-04-14)
 REDIS_NOTAM_STREAM = "skyops:notam:stream"                 # P6-G (2026-04-15)
 
 # Version
-API_VERSION = "2.1.1"  # P6 (2026-04-15) — feast + notam endpoint
+API_VERSION = "2.1.4"  # 2026-04-17 — SKYOPS_DATA_DIR override (site-packages bug fix)
