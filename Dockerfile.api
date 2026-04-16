@@ -40,7 +40,13 @@ ENV PYTHONUNBUFFERED=1 \
     PIP_NO_CACHE_DIR=1 \
     OTEL_ENABLED=1 \
     OTEL_CONSOLE_EXPORTER=0 \
-    OTEL_OTLP_EXPORTER=1
+    OTEL_OTLP_EXPORTER=1 \
+    # useradd -M 로 홈 디렉토리 미생성 → HF / transformers 가 /home/skyops/.cache 쓰려다
+    # PermissionError 발생. 캐시를 /app/.cache 로 돌리고 해당 디렉토리를 skyops 소유로.
+    HF_HOME=/app/.cache/huggingface \
+    TRANSFORMERS_CACHE=/app/.cache/huggingface \
+    SENTENCE_TRANSFORMERS_HOME=/app/.cache/huggingface \
+    XDG_CACHE_HOME=/app/.cache
 
 # Runtime system deps (libgomp for xgboost, libssl for chromadb)
 RUN apt-get update && apt-get install -y --no-install-recommends \
@@ -70,8 +76,11 @@ COPY serving/04_build_vectordb.py /app/serving/
 VOLUME ["/app/data"]
 
 # P8-G · Non-root user (uid/gid 10001) for Pod Security "restricted" profile
+# /app/.cache 를 skyops 소유로 만들어 HuggingFace/sentence-transformers 가
+# 첫 호출에 bge-m3 를 받을 때 PermissionError 나지 않도록 함.
 RUN groupadd -g 10001 skyops \
  && useradd -u 10001 -g skyops -s /sbin/nologin -M skyops \
+ && mkdir -p /app/.cache/huggingface \
  && chown -R skyops:skyops /app
 
 USER skyops

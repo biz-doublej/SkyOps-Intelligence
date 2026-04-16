@@ -56,19 +56,23 @@ def chat(req: ChatRequest) -> ChatResponse:
         if req.use_rag:
             # P8-C: fallback mode — skip LLM call, return retrieval summary
             if LLM_MODE == "fallback":
+                # v2.1.6 · RAG retrieve 실패해도 500 대신 empty-source fallback 으로 degrade.
+                # 발표 시연 중에 ChromaDB 인덱스 문제·임베딩 모델 다운로드 실패 등이
+                # 나도 사용자에게 보이는 건 완전히 죽은 500 이 아니라 "문서 못 찾음" 메시지.
+                sources: list[dict] = []
                 try:
                     with tracer.start_as_current_span("rag_retrieve_only"):
                         chain = ModelStore.rag()
                         result = chain.retrieve_only(req.question) \
                             if hasattr(chain, "retrieve_only") else chain.query(req.question)
+                    sources = result.get("sources", [])
                 except Exception as e:
-                    raise HTTPException(status_code=500, detail=f"RAG retrieve 오류: {e}")
-                sources = result.get("sources", [])
+                    print(f"⚠️  RAG retrieve 실패 → empty-source fallback: {e}")
                 return ChatResponse(
                     answer=_fallback_answer(req.question, sources),
                     sources=sources,
                     latency_ms=round((time.time() - t0) * 1000, 1),
-                    rag_used=True,
+                    rag_used=bool(sources),
                 )
 
             try:
@@ -165,6 +169,36 @@ def explain_anomaly(req: AnomalyExplainRequest):
     with tracer.start_as_current_span("explain_anomaly") as span:
         span.set_attribute("anomaly_type", req.anomaly_type)
         span.set_attribute("severity", req.severity)
+
+        # P8-C / v2.1.6 · NAS 모드: vLLM 없이도 템플릿 기반 설명 생성
+        if LLM_MODE == "fallback" or not VLLM_BASE_URL:
+            tmpl = (
+                f"[LLM fallback mode] {callsign} 에서 "
+                f"{TYPE_KR.get(req.anomaly_type, req.anomaly_type)}이 감지되었습니다.\n"
+                f"심각도: {SEV_KR.get(req.severity, req.severity)}.\n"
+            )
+            if req.anomaly_type.upper() == "ALTITUDE_SPIKE":
+                tmpl += (
+                    "권고: ATC 와 고도 확인 후 원 할당 FL 로 복귀하거나 긴급 하강 사유 확인. "
+                    "기계적 이상 가능성이 있을 경우 가까운 공항 비상 착륙 옵션 검토."
+                )
+            elif req.anomaly_type.upper() == "VELOCITY_SPIKE":
+                tmpl += (
+                    "권고: 속도 초과/부족 확인, 와류/윈드시어 가능성 체크. "
+                    "필요 시 관제사 간 교신으로 주변 항공기 간격 조정."
+                )
+            elif req.anomaly_type.upper() == "PATH_DEVIATION":
+                tmpl += (
+                    "권고: Heading 재지시, 충돌 회피 확인, NOTAM/제한 공역 위반 여부 점검. "
+                    "RNAV 장비 상태 확인 요청."
+                )
+            else:
+                tmpl += "권고: 관련 SOP 및 FAA AIM·ICAO Annex 절차를 참고해 주십시오."
+            return {
+                "explanation": tmpl,
+                "latency_ms": round((time.time() - t0) * 1000, 1),
+                "mode": "fallback",
+            }
 
         payload = {
             "model": LLM_MODEL_ID,
