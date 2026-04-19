@@ -121,9 +121,69 @@ def setup_tracing(app, service_name: Optional[str] = None) -> bool:
     except Exception as e:
         log.debug(f"LoggingInstrumentor 실패: {e}")
 
+    # v2.2.0 · ADR-007 D3 — 의존 서비스 자동 계측 (full-stack observability).
+    # 각 instrumentor 는 opt-in import: 실패하면 조용히 skip.
+    _install_optional_instrumentors(enabled_default=True)
+
     _initialized = True
     log.info(f"🔭 OpenTelemetry 초기화 완료 (service={svc}, version={version})")
     return True
+
+
+def _install_optional_instrumentors(enabled_default: bool = True) -> None:
+    """Kafka / Redis / httpx / urllib3 자동 instrumentor.
+
+    v2.2.0 · ADR-007 D3. 각 library 의 call 을 span 으로 감싸고 W3C
+    traceparent 헤더를 자동 주입해 cross-service 추적을 가능하게 함.
+    env `OTEL_INSTRUMENT_<NAME>=0` 으로 개별 비활성화 가능.
+    """
+    if not enabled_default:
+        return
+
+    # Kafka — pipeline/*.py 의 producer/consumer span.
+    if _bool_env("OTEL_INSTRUMENT_KAFKA", "1"):
+        try:
+            from opentelemetry.instrumentation.kafka import KafkaInstrumentor
+            KafkaInstrumentor().instrument()
+            log.info("✅ KafkaInstrumentor 등록")
+        except Exception as e:
+            log.debug(f"Kafka instrumentor 미설치/실패 (skip): {e}")
+
+    # Redis — serving/routers/*.py 의 get/hgetall/xadd span.
+    if _bool_env("OTEL_INSTRUMENT_REDIS", "1"):
+        try:
+            from opentelemetry.instrumentation.redis import RedisInstrumentor
+            RedisInstrumentor().instrument()
+            log.info("✅ RedisInstrumentor 등록")
+        except Exception as e:
+            log.debug(f"Redis instrumentor 미설치/실패 (skip): {e}")
+
+    # httpx — vLLM / RAG 등 outbound HTTP 호출.
+    if _bool_env("OTEL_INSTRUMENT_HTTPX", "1"):
+        try:
+            from opentelemetry.instrumentation.httpx import HTTPXClientInstrumentor
+            HTTPXClientInstrumentor().instrument()
+            log.info("✅ HTTPXClientInstrumentor 등록")
+        except Exception as e:
+            log.debug(f"httpx instrumentor 미설치/실패 (skip): {e}")
+
+    # urllib3 — stdlib 의 HTTP (monitoring/lineage 등).
+    if _bool_env("OTEL_INSTRUMENT_URLLIB3", "1"):
+        try:
+            from opentelemetry.instrumentation.urllib3 import URLLib3Instrumentor
+            URLLib3Instrumentor().instrument()
+            log.info("✅ URLLib3Instrumentor 등록")
+        except Exception as e:
+            log.debug(f"urllib3 instrumentor 미설치/실패 (skip): {e}")
+
+    # Requests — fallback 라이브러리 사용 코드가 있을 수 있음.
+    if _bool_env("OTEL_INSTRUMENT_REQUESTS", "1"):
+        try:
+            from opentelemetry.instrumentation.requests import RequestsInstrumentor
+            RequestsInstrumentor().instrument()
+            log.info("✅ RequestsInstrumentor 등록")
+        except Exception as e:
+            log.debug(f"requests instrumentor 미설치/실패 (skip): {e}")
 
 
 def get_tracer(name: str = "skyops"):

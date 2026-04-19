@@ -1,0 +1,143 @@
+# SkyOps SLO Error-Budget Burn-Rate Rules — v2.2.0 · ADR-007 D4b
+# ============================================================================
+# 다중 윈도우 burn-rate 경보 (Google SRE Workbook 기준).
+#
+# SLO 정의:
+#   - availability (non-5xx): 99.5% (30-day rolling)
+#   - delay latency p95 < 500ms
+#   - anomaly latency p95 < 200ms
+#
+# Burn-rate 수식:
+#   burn_rate = (error_rate) / (1 - SLO_target)
+#   즉 availability 99.5% → 실패율 0.5%, burn_rate=1 은 정확히 예산 소진 속도.
+#   burn_rate=14.4 는 "30-day 예산을 1시간 안에 전부 쓰고 있다" 라는 뜻.
+#
+# 다중 윈도우 조합 (Google SRE table 기준):
+#   fast:  1h   burn >= 14.4 AND 5m  burn >= 14.4    → page (즉시 대응)
+#   slow:  6h   burn >= 6    AND 30m burn >= 6       → ticket (근무시간)
+#   very slow: 3d burn >= 1  AND 6h  burn >= 1       → weekly review
+#
+# Alertmanager 는 severity=critical/warning/info 로 routing.
+
+groups:
+  - name: skyops-slo-burn-rate
+    interval: 30s
+    rules:
+      # ── availability (5xx) recording rules ────────────────────────
+      - record: skyops:http_error_rate:1m
+        expr: |
+          sum(rate(http_requests_total{job="skyops-api", status_code=~"5.."}[1m]))
+            /
+          sum(rate(http_requests_total{job="skyops-api"}[1m]))
+
+      - record: skyops:http_error_rate:5m
+        expr: |
+          sum(rate(http_requests_total{job="skyops-api", status_code=~"5.."}[5m]))
+            /
+          sum(rate(http_requests_total{job="skyops-api"}[5m]))
+
+      - record: skyops:http_error_rate:30m
+        expr: |
+          sum(rate(http_requests_total{job="skyops-api", status_code=~"5.."}[30m]))
+            /
+          sum(rate(http_requests_total{job="skyops-api"}[30m]))
+
+      - record: skyops:http_error_rate:1h
+        expr: |
+          sum(rate(http_requests_total{job="skyops-api", status_code=~"5.."}[1h]))
+            /
+          sum(rate(http_requests_total{job="skyops-api"}[1h]))
+
+      - record: skyops:http_error_rate:6h
+        expr: |
+          sum(rate(http_requests_total{job="skyops-api", status_code=~"5.."}[6h]))
+            /
+          sum(rate(http_requests_total{job="skyops-api"}[6h]))
+
+      - record: skyops:http_error_rate:3d
+        expr: |
+          sum(rate(http_requests_total{job="skyops-api", status_code=~"5.."}[3d]))
+            /
+          sum(rate(http_requests_total{job="skyops-api"}[3d]))
+
+    # SLO target = 99.5% → error budget = 0.005
+    # burn_rate = error_rate / 0.005
+
+  - name: skyops-slo-burn-rate-alerts
+    rules:
+      # ── Fast burn — critical, page analyst ────────────────────────
+      # 1h burn_rate >= 14.4 AND 5m burn_rate >= 14.4
+      # meaning: 현 속도 유지 시 30-day 예산을 ~2시간 안에 소진
+      - alert: SkyOpsErrorBudgetBurnRateFast
+        expr: |
+          skyops:http_error_rate:1h  > (14.4 * 0.005)
+          and
+          skyops:http_error_rate:5m  > (14.4 * 0.005)
+        for: 2m
+        labels:
+          severity: critical
+          slo: availability
+          team: skyops-ops
+        annotations:
+          summary: "SkyOps availability SLO 을 빠르게 소진 중 (burn_rate >= 14.4)"
+          description: |
+            지난 1시간·5분 창 모두에서 error_rate > 7.2% (14.4 * 0.005).
+            현 속도로 30일 error budget 을 2시간 안에 전부 소진합니다.
+            runbook: docs/runbooks/slo-fast-burn.md
+
+      # ── Slow burn — warning, ticket ───────────────────────────────
+      # 6h burn_rate >= 6 AND 30m burn_rate >= 6
+      - alert: SkyOpsErrorBudgetBurnRateSlow
+        expr: |
+          skyops:http_error_rate:6h  > (6 * 0.005)
+          and
+          skyops:http_error_rate:30m > (6 * 0.005)
+        for: 15m
+        labels:
+          severity: warning
+          slo: availability
+          team: skyops-ops
+        annotations:
+          summary: "SkyOps availability SLO 을 꾸준히 소진 중 (burn_rate >= 6)"
+          description: |
+            지난 6시간·30분 창 모두에서 error_rate > 3%.
+            근무시간에 조사 필요.
+
+      # ── Very slow burn — info, weekly review ──────────────────────
+      - alert: SkyOpsErrorBudgetBurnRateVerySlow
+        expr: |
+          skyops:http_error_rate:3d > (1 * 0.005)
+          and
+          skyops:http_error_rate:6h > (1 * 0.005)
+        for: 1h
+        labels:
+          severity: info
+          slo: availability
+          team: skyops-ops
+        annotations:
+          summary: "SkyOps availability SLO 누적 소진 진행 (burn_rate >= 1)"
+          description: |
+            예산을 정상 속도로 소진 중이지만 누적됨. 주간 SLO 리뷰 시 확인.
+
+      # ── Latency SLO — p95 delay endpoint ──────────────────────────
+      - alert: SkyOpsDelayLatencySLOBreach
+        expr: |
+          skyops:http_request_latency_seconds:p95_5m{handler=~"/predict/delay.*"} > 0.5
+        for: 5m
+        labels:
+          severity: warning
+          slo: latency_p95
+          endpoint: /predict/delay
+        annotations:
+          summary: "/predict/delay p95 > 500ms SLO 위반"
+
+      - alert: SkyOpsAnomalyLatencySLOBreach
+        expr: |
+          skyops:http_request_latency_seconds:p95_5m{handler=~"/detect/anomaly.*"} > 0.2
+        for: 5m
+        labels:
+          severity: warning
+          slo: latency_p95
+          endpoint: /detect/anomaly
+        annotations:
+          summary: "/detect/anomaly p95 > 200ms SLO 위반"

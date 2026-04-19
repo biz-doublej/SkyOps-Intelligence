@@ -51,6 +51,12 @@ otel = [
     "opentelemetry-exporter-otlp>=1.27.0",
     "opentelemetry-instrumentation-fastapi>=0.48b0",
     "opentelemetry-instrumentation-logging>=0.48b0",
+    # v2.2.0 · ADR-007 D3 — full-stack dependency tracing
+    "opentelemetry-instrumentation-kafka-python>=0.48b0",
+    "opentelemetry-instrumentation-redis>=0.48b0",
+    "opentelemetry-instrumentation-httpx>=0.48b0",
+    "opentelemetry-instrumentation-urllib3>=0.48b0",
+    "opentelemetry-instrumentation-requests>=0.48b0",
 ]
 
 # Streaming pipeline — Kafka + Redis

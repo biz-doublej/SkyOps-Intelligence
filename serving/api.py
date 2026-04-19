@@ -32,7 +32,15 @@ from fastapi.middleware.cors import CORSMiddleware
 
 from common.constants import API_VERSION, VLLM_BASE_URL
 from common.telemetry import setup_tracing
-from routers import anomaly, delay, gateway, notification, rag, streaming
+from routers import (
+    alert_triage,  # v2.2.0 · ADR-007 D2 (Phase 3 split)
+    anomaly,
+    delay,
+    gateway,
+    notification,
+    rag,
+    streaming,
+)
 
 # ──────────────────────────────────────────────────────────────────────
 # FastAPI 앱 초기화
@@ -72,6 +80,7 @@ _otel_enabled = setup_tracing(app)
 app.include_router(gateway.router)
 app.include_router(delay.router)
 app.include_router(anomaly.router)
+app.include_router(alert_triage.router)   # v2.2.0 · ADR-007 D2
 app.include_router(rag.router)
 app.include_router(notification.router)
 app.include_router(streaming.router)

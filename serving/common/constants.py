@@ -121,4 +121,4 @@ REDIS_ANOMALY_DEBOUNCE = "skyops:anomaly:debounce:{}:{}"   # P2 (2026-04-14)
 REDIS_NOTAM_STREAM = "skyops:notam:stream"                 # P6-G (2026-04-15)
 
 # Version
-API_VERSION = "2.1.10"  # 2026-04-19 — ADR-006 Stage 3 Operable Anomaly Stack (per-phase routing + hysteresis + suppression + triage)
+API_VERSION = "2.2.0"  # 2026-04-19 — ADR-007 Stage 4 Production Readiness (RAGAs CI + router split + full-stack OTel + RBAC/SLO burn-rate/Shadow)

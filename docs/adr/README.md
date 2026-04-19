@@ -15,6 +15,7 @@ MADR(Markdown Architecture Decision Records) 템플릿을 사용합니다.
 | [004](ADR-004-foundation-honesty.md) | Foundation 정직성 — Walk-forward eval + Schema contract + Iceberg REST catalog + OpenLineage/MLflow Registry | **Accepted** | 2026-04-19 |
 | [005](ADR-005-network-aware-model.md) | Network-aware Model — Rotation + Graph topology + Upstream delay state + CQR (GNN Proposed) | **Accepted** (D1/D2-Static/D2-Upstream/D3), **Proposed** (D2-GNN) | 2026-04-19 |
 | [006](ADR-006-operable-anomaly-stack.md) | Operable Anomaly Stack — Per-phase IF routing + Hysteresis + Suppression + Top-K triage | **Accepted** | 2026-04-19 |
+| [007](ADR-007-production-readiness.md) | Production Readiness — RAGAs CI + Phase 3 router split + Full-stack OTel + RBAC/SLO burn-rate/Canary/Shadow | **Accepted** | 2026-04-19 |
 
 ---
 

@@ -12,7 +12,13 @@ import time
 from datetime import datetime, timezone
 
 import pandas as pd
-from fastapi import APIRouter, HTTPException
+from fastapi import APIRouter, Depends, HTTPException
+
+from common.auth import (
+    Principal,
+    get_principal,
+    require_analyst,
+)
 
 from common.constants import (
     FEEDBACK_DIR,
@@ -39,9 +45,10 @@ from common.models import (
     AnomalyFeedbackResponse,
     AnomalyRequest,
     AnomalyResponse,
-    TriageItem,
-    TriageResponse,
 )
+# v2.2.0 · ADR-007 D2 — TriageItem/TriageResponse + /alerts/triage 는
+# serving/routers/alert_triage.py 로 이관됨. anomaly.py 는 detection /
+# feedback / approve 만 담당.
 from common.redis_client import get_redis
 from common.telemetry import get_tracer
 
@@ -260,9 +267,23 @@ def detect_anomaly(req: AnomalyRequest) -> AnomalyResponse:
     )
 
 
-@router.post("/anomaly/feedback", response_model=AnomalyFeedbackResponse)
-def submit_anomaly_feedback(req: AnomalyFeedbackRequest) -> AnomalyFeedbackResponse:
-    """Analyst feedback stub → data/analyst_feedback/feedback.jsonl (P2)."""
+@router.post(
+    "/anomaly/feedback",
+    response_model=AnomalyFeedbackResponse,
+    dependencies=[Depends(require_analyst)],  # v2.2.0 · ADR-007 D4a RBAC
+)
+def submit_anomaly_feedback(
+    req: AnomalyFeedbackRequest,
+    principal: Principal = Depends(get_principal),
+) -> AnomalyFeedbackResponse:
+    """Analyst feedback → data/analyst_feedback/feedback.jsonl.
+
+    RBAC: analyst 또는 admin 역할 필요. v2.2.0 부터 req.labeled_by 가
+    principal.user 로 강제 overwrite 됨 (header spoofing 방지).
+    """
+    # v2.2.0 · 신뢰 가능한 identity 로 labeled_by 강제 설정 (클라이언트 제공값 무시)
+    if principal.authenticated:
+        req.labeled_by = principal.user
     valid_labels = {"true_positive", "false_positive", "uncertain"}
     if req.label not in valid_labels:
         raise HTTPException(
@@ -558,7 +579,11 @@ def _bandit_v2_select(items: list[ActiveLearningItem],
 VALID_DECISIONS = {"approved", "rejected", "modified", "deferred"}
 
 
-@router.post("/anomaly/approve", response_model=AnomalyApprovalResponse)
+@router.post(
+    "/anomaly/approve",
+    response_model=AnomalyApprovalResponse,
+    dependencies=[Depends(require_analyst)],  # v2.2.0 · ADR-007 D4a RBAC
+)
 def approve_advisory(req: AnomalyApprovalRequest) -> AnomalyApprovalResponse:
     """Analyst decision on an LLM-generated advisory before broadcast.
 
@@ -620,111 +645,4 @@ def approve_advisory(req: AnomalyApprovalRequest) -> AnomalyApprovalResponse:
         advisory_id=req.advisory_id,
         decision=req.decision,
         audit_trace_id=trace_id or None,
-    )
-
-
-# ──────────────────────────────────────────────────────────────────────
-# v2.1.10 · ADR-006 D4 · GET /alerts/triage — 실시간 분석가 triage 큐
-# ──────────────────────────────────────────────────────────────────────
-SEVERITY_WEIGHT = {
-    "CRITICAL": 1.0,
-    "HIGH": 0.7,
-    "MEDIUM": 0.4,
-    "LOW": 0.2,
-}
-
-
-def _parse_ts_to_age(ts_raw) -> float:
-    """Return age in seconds. Supports ISO8601 string, epoch float, or None."""
-    if ts_raw is None:
-        return 0.0
-    try:
-        if isinstance(ts_raw, (int, float)):
-            epoch = float(ts_raw)
-        else:
-            s = str(ts_raw)
-            if s.endswith("Z"):
-                s = s[:-1] + "+00:00"
-            epoch = datetime.fromisoformat(s).timestamp()
-        return max(0.0, datetime.now(timezone.utc).timestamp() - epoch)
-    except Exception:
-        return 0.0
-
-
-@router.get("/alerts/triage", response_model=TriageResponse)
-def get_alert_triage(limit: int = 10, include_labeled: bool = False):
-    """Real-time analyst triage queue — composite = severity × (1 + uncertainty).
-
-    v2.1.10 · ADR-006 D4.
-
-    Active Learning 과의 차이:
-      - `/active-learning/next` → "label what we're unsure about" — uncertainty 최대화
-      - `/alerts/triage` → "what should analyst SEE FIRST" — severity × uncertainty
-
-    운영자가 대시보드를 처음 열었을 때 "가장 시급한 K 개"를 보여주는 용도.
-    이미 라벨된 알람은 기본적으로 제외 (include_labeled=True 로 포함 가능).
-
-    Returns: top-K items sorted by composite_score desc.
-    """
-    generated_at = datetime.now(timezone.utc).isoformat()
-    limit = max(1, min(100, int(limit)))
-
-    r = get_redis()
-    if r is None:
-        return TriageResponse(
-            items=[], total_considered=0, returned_count=0, generated_at=generated_at,
-        )
-
-    try:
-        raw_events = r.lrange(REDIS_ANOMALY_STREAM, 0, 499)
-    except Exception as e:
-        print(f"⚠️  /alerts/triage Redis 조회 실패: {e}")
-        return TriageResponse(
-            items=[], total_considered=0, returned_count=0, generated_at=generated_at,
-        )
-
-    labeled = set() if include_labeled else _load_labeled_alert_ids()
-
-    candidates: list[TriageItem] = []
-    for raw in raw_events:
-        try:
-            evt = _json.loads(raw)
-        except _json.JSONDecodeError:
-            continue
-        alert_id = evt.get("alert_id", "")
-        if not alert_id:
-            continue
-        already_labeled = alert_id in labeled
-        if already_labeled and not include_labeled:
-            continue
-
-        score = float(evt.get("anomaly_score", -0.15) or -0.15)
-        severity = str(evt.get("severity", "LOW")).upper()
-        sev_w = SEVERITY_WEIGHT.get(severity, 0.2)
-        unc = _uncertainty_score(score, severity)
-        composite = sev_w * (1.0 + unc)
-
-        candidates.append(TriageItem(
-            alert_id=alert_id,
-            anomaly_score=score,
-            anomaly_type=evt.get("anomaly_type", "UNKNOWN"),
-            severity=severity,
-            severity_weight=sev_w,
-            uncertainty_score=unc,
-            composite_score=round(composite, 4),
-            flight_phase=evt.get("flight_phase"),
-            icao24=evt.get("icao24"),
-            callsign=evt.get("callsign"),
-            description=str(evt.get("description", ""))[:300],
-            alert_age_sec=round(_parse_ts_to_age(evt.get("event_timestamp") or evt.get("ts")), 1),
-            already_labeled=already_labeled,
-        ))
-
-    candidates.sort(key=lambda x: x.composite_score, reverse=True)
-    top = candidates[:limit]
-    return TriageResponse(
-        items=top,
-        total_considered=len(candidates),
-        returned_count=len(top),
-        generated_at=generated_at,
     )

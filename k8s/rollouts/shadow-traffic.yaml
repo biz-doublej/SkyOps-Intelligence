@@ -1,0 +1,124 @@
+# SkyOps Shadow Traffic Mirror — v2.2.0 · ADR-007 D4d
+# ==========================================================================
+# 목적:
+#   새 모델/코드 버전을 실제 프로덕션 트래픽으로 검증하되 **응답을 client 로
+#   돌려보내지 않는** shadow 배포. Canary 보다 한 단계 보수적 — 첫 5% 트래픽
+#   조차 받기 전에 "같은 요청이 새 버전에서도 멀쩡히 처리되는가" 를 본다.
+#
+# 구현 두 방식 중 선택 가능:
+#
+# (1) **NGINX Ingress mirror** — 표준 annotation. ingress-nginx 설치 필수.
+#     `nginx.ingress.kubernetes.io/mirror-target` + `/mirror-host` 로 모든
+#     요청을 shadow Service 로 **복사**. client 는 origin 응답만 받음.
+#
+# (2) **Argo Rollouts experiment** — Rollout spec 에 `experiment` step 을 추가해
+#     일정 시간 동안 shadow ReplicaSet 을 띄우고 AnalysisTemplate 으로 검증.
+#     기존 api-rollout.yaml 에 step 만 추가.
+#
+# 본 파일은 (1) 을 기본 제공 — 운영 환경은 ingress-nginx 를 쓰므로.
+---
+
+# ── 1. Shadow Deployment (기존 canary 이미지와 다른 tag 운용 가능) ───
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: skyops-api-shadow
+  namespace: skyops
+  labels:
+    app: skyops-api
+    variant: shadow
+    part-of: skyops
+spec:
+  replicas: 1  # shadow 는 1 pod 로 충분 — 트래픽만 샘플링
+  selector:
+    matchLabels:
+      app: skyops-api
+      variant: shadow
+  template:
+    metadata:
+      labels:
+        app: skyops-api
+        variant: shadow
+      annotations:
+        prometheus.io/scrape: "true"
+        prometheus.io/port: "8000"
+    spec:
+      containers:
+        - name: api
+          image: ghcr.io/biz-doublej/skyops-api:shadow   # CD 가 주입
+          imagePullPolicy: Always
+          ports:
+            - name: http
+              containerPort: 8000
+          env:
+            - name: DEPLOY_ENV
+              value: "shadow"   # OTel resource 에 반영 → Jaeger 에서 필터링
+            - name: SKYOPS_SHADOW_MODE
+              value: "1"       # app 에서 write 경로를 no-op 으로 만드는 hook
+            - name: SKYOPS_AUTH_ENFORCE
+              value: "0"       # shadow 는 prod 헤더 없이 들어올 수 있으므로 soft
+          resources:
+            requests: {cpu: "100m", memory: "256Mi"}
+            limits: {cpu: "500m", memory: "512Mi"}
+
+---
+
+# ── 2. Shadow Service ────────────────────────────────────────────────
+apiVersion: v1
+kind: Service
+metadata:
+  name: skyops-api-shadow
+  namespace: skyops
+  labels:
+    app: skyops-api
+    variant: shadow
+spec:
+  selector:
+    app: skyops-api
+    variant: shadow
+  ports:
+    - name: http
+      port: 80
+      targetPort: 8000
+
+---
+
+# ── 3. NGINX Ingress — mirror to shadow ─────────────────────────────
+#    전체 트래픽의 10% 를 샘플링해서 shadow 로 복제.
+#    client 응답은 origin 만 사용 (mirror-request-body=true 여도 응답 무시).
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: skyops-api-shadow
+  namespace: skyops
+  annotations:
+    nginx.ingress.kubernetes.io/mirror-target: "http://skyops-api-shadow.skyops.svc.cluster.local"
+    nginx.ingress.kubernetes.io/mirror-host: "shadow.skyops.internal"
+    # mirror-request-body 는 기본값 true — POST body 도 복사.
+    # mirror-probability 는 ingress-nginx 0.50+ 에서 지원.
+    nginx.ingress.kubernetes.io/mirror-probability: "0.1"   # 10%
+spec:
+  ingressClassName: nginx
+  rules:
+    - host: api.skyops.example.com
+      http:
+        paths:
+          - path: /
+            pathType: Prefix
+            backend:
+              service:
+                name: skyops-api      # 실 production 서비스
+                port:
+                  number: 80
+
+---
+
+# ── 4. Grafana dashboard hint (주석만) ──────────────────────────────
+#    Shadow 환경의 error_rate / latency 를 Jaeger deployment.environment="shadow"
+#    label 로 분리 조회. SLO burn-rate rules 은 job="skyops-api" 만 보므로
+#    shadow 는 경보를 발생시키지 않는다 (의도).
+#    Grafana 대시보드에 "Shadow vs Prod" 비교 패널을 추가할 때:
+#
+#        rate(http_requests_total{deploy_env="shadow", status_code=~"5.."}[5m])
+#
+#    가 production 대비 유의미하게 높으면 rollout 중단.
