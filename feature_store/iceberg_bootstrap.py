@@ -21,6 +21,7 @@ from __future__ import annotations
 
 import argparse
 import logging
+import os
 import sys
 from pathlib import Path
 
@@ -55,10 +56,58 @@ TABLES = {
 }
 
 
-def bootstrap_pyiceberg(layer_filter: str | None, namespace: str) -> int:
-    """Create catalog + namespaces + (empty) tables with pyiceberg sql-catalog backend.
+def _build_catalog_config() -> dict:
+    """Return pyiceberg load_catalog kwargs based on env (v2.1.8 · ADR-004).
 
-    Uses SQLite catalog for local dev. Prod would swap to Glue or Hive Metastore.
+    Two modes:
+
+    1. **SQL + local file warehouse** (default, laptop dev).
+       - `type=sql`, `uri=sqlite:///…/catalog.db`, warehouse is a local directory.
+       - Zero-dep, no docker services needed.
+
+    2. **REST (Nessie) + S3 (MinIO)** — set `ICEBERG_CATALOG=rest`.
+       - `type=rest`, `uri=http://nessie:19120/iceberg/v1`.
+       - Warehouse points to MinIO bucket `s3://skyops-iceberg/`.
+       - Matches the `docker compose --profile warehouse up` services so
+         training, serving, and BI can share one catalog.
+
+    The switch is a single env flag so CI / prod can flip without code edits.
+    """
+    mode = os.getenv("ICEBERG_CATALOG", "sql").lower()
+
+    if mode == "rest":
+        # Nessie exposes Iceberg REST catalog endpoint on /iceberg/v1.
+        uri = os.getenv("ICEBERG_CATALOG_URI", "http://nessie:19120/iceberg/v1")
+        warehouse = os.getenv("ICEBERG_WAREHOUSE_S3", "s3://skyops-iceberg/")
+        s3_endpoint = os.getenv("AWS_S3_ENDPOINT", "http://minio:9000")
+        s3_access = os.getenv("AWS_ACCESS_KEY_ID", "skyops")
+        s3_secret = os.getenv("AWS_SECRET_ACCESS_KEY", "skyops-dev-only")
+        return {
+            "type": "rest",
+            "uri": uri,
+            "warehouse": warehouse,
+            "s3.endpoint": s3_endpoint,
+            "s3.access-key-id": s3_access,
+            "s3.secret-access-key": s3_secret,
+            "s3.path-style-access": "true",
+        }
+
+    # Default: SQL catalog, local file warehouse
+    ICEBERG_WAREHOUSE.mkdir(parents=True, exist_ok=True)
+    return {
+        "type": "sql",
+        "uri": f"sqlite:///{ICEBERG_WAREHOUSE}/catalog.db",
+        "warehouse": f"file://{ICEBERG_WAREHOUSE}",
+    }
+
+
+def bootstrap_pyiceberg(layer_filter: str | None, namespace: str) -> int:
+    """Create catalog + namespaces + (empty) tables.
+
+    Backends:
+      - `ICEBERG_CATALOG=sql`  (default)  SQLite + local file warehouse.
+      - `ICEBERG_CATALOG=rest`            Nessie REST + MinIO (S3) —
+        services defined under `warehouse` profile in docker-compose.yml.
     """
     try:
         import pyarrow as pa
@@ -67,16 +116,10 @@ def bootstrap_pyiceberg(layer_filter: str | None, namespace: str) -> int:
         print("❌ pyiceberg 미설치. `pip install -e \".[iceberg]\"` 실행 후 재시도.")
         return 1
 
-    ICEBERG_WAREHOUSE.mkdir(parents=True, exist_ok=True)
-
-    catalog = load_catalog(
-        "skyops",
-        **{
-            "type": "sql",
-            "uri": f"sqlite:///{ICEBERG_WAREHOUSE}/catalog.db",
-            "warehouse": f"file://{ICEBERG_WAREHOUSE}",
-        },
-    )
+    cfg = _build_catalog_config()
+    print(f"  Catalog backend: {cfg['type']} @ {cfg.get('uri')}")
+    print(f"  Warehouse:       {cfg.get('warehouse')}")
+    catalog = load_catalog("skyops", **cfg)
 
     # Namespace
     ns = (namespace,)

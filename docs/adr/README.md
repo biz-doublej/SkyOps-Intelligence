@@ -12,6 +12,7 @@ MADR(Markdown Architecture Decision Records) 템플릿을 사용합니다.
 | [001](ADR-001-service-decomposition.md) | Service Decomposition — Split `serving/api.py` monolith into 6 microservices | **Accepted** (Phase 1, Phase 2) | 2026-04-14 |
 | [002](ADR-002-api-gateway-selection.md) | API Gateway Selection — Traefik v3 for ADR-001 Phase 3 | **Proposed** | 2026-04-14 |
 | [003](ADR-003-multi-region-deployment.md) | Multi-Region Deployment — Hybrid active-active read + KR primary write | **Proposed** | 2026-04-15 |
+| [004](ADR-004-foundation-honesty.md) | Foundation 정직성 — Walk-forward eval + Schema contract + Iceberg REST catalog + OpenLineage/MLflow Registry | **Accepted** | 2026-04-19 |
 
 ---
 

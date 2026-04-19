@@ -34,7 +34,8 @@ import numpy as np
 import pandas as pd
 from sklearn.ensemble import RandomForestClassifier
 from sklearn.metrics import classification_report, confusion_matrix
-from sklearn.model_selection import train_test_split
+# v2.1.8 · train_test_split shuffle=True 제거. 시계열 데이터에 random split 을
+# 쓰면 temporal leakage 가 발생해 평가가 낙관적으로 편향됨 — ADR-004 Stage 1.
 
 PROJECT_ROOT = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(PROJECT_ROOT / "pipeline"))
@@ -196,22 +197,41 @@ def main():
         df = pd.read_csv(RAW_CSV, low_memory=False, nrows=args.n_samples)
     print(f"   {len(df):,} flight rows")
 
-    # 2. Synthesize phase samples
-    print("\n🔧 Synthesizing phase samples (silver labels)...")
-    samples = synthesize_phase_samples(df)
-    print(f"   {len(samples):,} phase samples (7 phases × {len(df):,})")
-    print(f"   Label distribution: {samples['_phase'].value_counts().to_dict()}")
+    # 2. Time-aware chronological split  ─── ADR-004 / Stage 1 (v2.1.8)
+    #    기존: train_test_split(shuffle=True, stratify=y) — 미래 flight 의 phase
+    #    sample 이 train 에 섞여 temporal leakage 발생.
+    #    수정: 원본 df 를 FL_DATE (없으면 행 인덱스) 기준 80/20 으로 chronological
+    #    split 후 각 절반에서 독립적으로 phase samples 합성 → test 는 train 보다
+    #    엄격히 미래의 flight.
+    print("\n🕰  Chronological 80/20 split on flight rows (FL_DATE)...")
+    if "FL_DATE" in df.columns:
+        df = df.copy()
+        df["_fl_date_dt"] = pd.to_datetime(df["FL_DATE"], errors="coerce")
+        df = df.sort_values("_fl_date_dt", kind="stable").reset_index(drop=True)
+        split_msg = f"sorted by FL_DATE  ({df['_fl_date_dt'].min()} → {df['_fl_date_dt'].max()})"
+    else:
+        # FL_DATE 없으면 행 인덱스 자체가 시간순이라 가정 (Kaggle 파일 규칙).
+        split_msg = "FL_DATE 없음 → 행 인덱스 기준 chronological"
+    print(f"   {split_msg}")
 
-    # 3. Train/test split
+    cutoff = int(len(df) * 0.8)
+    df_train, df_test = df.iloc[:cutoff], df.iloc[cutoff:]
+    print(f"   train flights: {len(df_train):,} / test flights: {len(df_test):,}")
+
+    # 3. Synthesize phase samples independently per split
+    print("\n🔧 Synthesizing phase samples (silver labels)...")
+    samples_train = synthesize_phase_samples(df_train)
+    samples_test = synthesize_phase_samples(df_test)
+    print(f"   train samples: {len(samples_train):,}  /  test samples: {len(samples_test):,}")
+    print(f"   train label dist: {samples_train['_phase'].value_counts().to_dict()}")
+
     feature_cols = ["on_ground", "baro_altitude", "velocity", "vertical_rate",
                     "distance_miles", "air_time_min"]
-    X = samples[feature_cols].values
-    y = samples["_phase"].values
-
-    X_train, X_test, y_train, y_test = train_test_split(
-        X, y, test_size=0.2, random_state=42, stratify=y
-    )
-    print(f"\n   Train: {len(X_train):,} / Test: {len(X_test):,}")
+    X_train = samples_train[feature_cols].values
+    y_train = samples_train["_phase"].values
+    X_test = samples_test[feature_cols].values
+    y_test = samples_test["_phase"].values
+    print(f"\n   Train: {len(X_train):,} / Test: {len(X_test):,} (time-ordered, no leakage)")
 
     # 4. Train
     if args.model == "xgboost":

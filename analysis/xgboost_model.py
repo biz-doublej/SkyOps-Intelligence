@@ -29,6 +29,7 @@ XGBoost + Optuna HPO + 5-Fold CV + MLflow
 from __future__ import annotations
 
 import argparse
+import os
 import pickle
 import sys
 import time
@@ -329,7 +330,8 @@ def train_final_model(
     except Exception:
         emit_train_run_complete = None  # type: ignore
 
-    with mlflow.start_run(run_name="XGBoost_Optuna_TimeSeriesCV"):
+    registered_version = None  # Track for OpenLineage outputs
+    with mlflow.start_run(run_name="XGBoost_Optuna_TimeSeriesCV") as run:
         mlflow.log_params(best_params)
         mlflow.log_params({"fit_sec": fit_sec})
         for k, v in cv_metrics.items():
@@ -340,9 +342,41 @@ def train_final_model(
                 if k != "split":
                     mlflow.log_metric(f"{pfx}_{k}", v)
         mlflow.xgboost.log_model(model, artifact_path="xgboost_model")
+
+        # v2.1.8 · ADR-004 · Model Registry 연동
+        # 기준 R² ≥ 0.40 && Conformal coverage 는 별도 calibration step 에서 검증.
+        # 기준 통과 시 skyops-delay-xgb 라는 Registry 이름으로 새 버전 등록 →
+        # Staging 으로 자동 전환. Production 승격은 여전히 사람이 승인 (HITL).
+        # 기준 미달이면 log 만 남기고 register 하지 않는다 (Staging 을 오염시키지 않음).
+        try:
+            REGISTRY_NAME = "skyops-delay-xgb"
+            REGISTER_R2_THRESHOLD = float(os.getenv("REGISTER_R2_THRESHOLD", "0.40"))
+            test_r2 = float(test_m.get("r2", 0.0))
+            if test_r2 >= REGISTER_R2_THRESHOLD:
+                from mlflow.tracking import MlflowClient
+                model_uri = f"runs:/{run.info.run_id}/xgboost_model"
+                mv = mlflow.register_model(model_uri=model_uri, name=REGISTRY_NAME)
+                registered_version = mv.version
+                print(f"   🗃  Model Registry: {REGISTRY_NAME} v{mv.version} 등록")
+                # Transition to Staging automatically; Production은 HITL 승인 필요.
+                MlflowClient().transition_model_version_stage(
+                    name=REGISTRY_NAME,
+                    version=mv.version,
+                    stage="Staging",
+                    archive_existing_versions=False,
+                )
+                print(f"   ➡️  stage=Staging (test_r2={test_r2:.4f} ≥ {REGISTER_R2_THRESHOLD})")
+            else:
+                print(
+                    f"   ⏭  Registry skip: test_r2={test_r2:.4f} < {REGISTER_R2_THRESHOLD} "
+                    f"(threshold 미달, 기존 Staging 유지)"
+                )
+        except Exception as e:  # noqa: BLE001
+            # Registry 연결 실패는 학습 실패로 간주하지 않는다.
+            print(f"   ⚠️  Model Registry 실패 (무시하고 계속): {e}")
     print("   📊 MLflow 로깅 완료")
 
-    # P7-B: OpenLineage COMPLETE
+    # P7-B: OpenLineage COMPLETE  (model_version = Registry version — v2.1.8)
     if ol_run_id and emit_train_run_complete is not None:
         try:
             metrics_for_ol = {
@@ -350,11 +384,15 @@ def train_final_model(
                 "test_rmse": float(test_m.get("rmse", 0)),
                 "test_r2": float(test_m.get("r2", 0)),
             }
+            lineage_model_version = (
+                f"skyops-delay-xgb/v{registered_version}" if registered_version
+                else "unregistered"
+            )
             emit_train_run_complete(
                 run_id=ol_run_id,
                 job_name="xgboost_delay_train",
                 outputs=[("skyops.gold_inference_log", None)],
-                model_version="2.1.1",
+                model_version=lineage_model_version,
                 metrics=metrics_for_ol,
             )
         except Exception:
