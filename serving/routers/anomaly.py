@@ -18,12 +18,18 @@ from common.constants import (
     FEEDBACK_DIR,
     FEEDBACK_FILE,
     IF_FEATURES,
+    IF_HYSTERESIS_TTL_SEC,
+    IF_SCORE_ENTER,
+    IF_SCORE_EXIT,
     IF_SCORE_THRESHOLD,
     REDIS_AIRCRAFT_PHASE,
     REDIS_ANOMALY_DEBOUNCE,
+    REDIS_ANOMALY_HYSTERESIS,
     REDIS_ANOMALY_STREAM,
+    REDIS_ANOMALY_SUPPRESS_AUDIT,
 )
 from common.model_store import ModelStore
+from common.suppression import SUPPRESSION_ENABLED, SuppressionEngine
 from common.models import (
     ActiveLearningItem,
     ActiveLearningQuery,
@@ -33,6 +39,8 @@ from common.models import (
     AnomalyFeedbackResponse,
     AnomalyRequest,
     AnomalyResponse,
+    TriageItem,
+    TriageResponse,
 )
 from common.redis_client import get_redis
 from common.telemetry import get_tracer
@@ -41,69 +49,198 @@ router = APIRouter(tags=["anomaly"])
 tracer = get_tracer("anomaly")
 
 
+# ──────────────────────────────────────────────────────────────────────
+# v2.1.10 · ADR-006 · Phase-aware routing + hysteresis + suppression
+# ──────────────────────────────────────────────────────────────────────
+
+def _resolve_phase(req: AnomalyRequest, r) -> tuple[str | None, float | None]:
+    """Pick the flight phase to route on.
+
+    Priority:
+      1. Explicit req.flight_phase (if caller knows it).
+      2. Redis `skyops:aircraft:phase:{flight_id}` hash from live ADS-B classifier.
+      3. None → base model fallback in ModelStore.
+    """
+    if req.flight_phase:
+        return req.flight_phase.upper(), 1.0
+    if req.flight_id and r is not None:
+        try:
+            phase_data = r.hgetall(REDIS_AIRCRAFT_PHASE.format(req.flight_id))
+            if phase_data:
+                phase = phase_data.get("phase")
+                conf_str = phase_data.get("confidence")
+                return (
+                    phase.upper() if phase else None,
+                    float(conf_str) if conf_str else None,
+                )
+        except Exception:
+            pass
+    return None, None
+
+
+def _apply_hysteresis(flight_id: str | None, score: float, r) -> tuple[bool, str]:
+    """Enter/exit hysteresis state machine.
+
+    Returns (is_alerting, new_state).  new_state in {"clear", "alerting"}.
+
+    - `score < IF_SCORE_ENTER`  → alerting
+    - `score > IF_SCORE_EXIT`   → clear
+    - otherwise → keep previous state (flapping 방지)
+
+    State is persisted in Redis with TTL (default 15 min). Missing state =
+    treated as "clear" (cold start).
+    """
+    if r is None or not flight_id:
+        # Redis 없으면 단일 임계값 fallback.
+        return score < IF_SCORE_ENTER, ("alerting" if score < IF_SCORE_ENTER else "clear")
+
+    key = REDIS_ANOMALY_HYSTERESIS.format(flight_id)
+    try:
+        prev = r.get(key) or "clear"
+    except Exception:
+        prev = "clear"
+
+    if score < IF_SCORE_ENTER:
+        new_state = "alerting"
+    elif score > IF_SCORE_EXIT:
+        new_state = "clear"
+    else:
+        new_state = prev  # hysteresis band → 현상 유지
+
+    if new_state != prev:
+        try:
+            r.setex(key, IF_HYSTERESIS_TTL_SEC, new_state)
+        except Exception:
+            pass
+    else:
+        try:
+            # TTL 갱신 (활성 flight 은 state 유지)
+            r.expire(key, IF_HYSTERESIS_TTL_SEC)
+        except Exception:
+            pass
+    return new_state == "alerting", new_state
+
+
+def _check_suppression(req: AnomalyRequest, phase: str | None, r) -> tuple[bool, str | None, str | None]:
+    """Check alert_suppression.yaml rules. Returns (suppressed, reason, kind)."""
+    if not SUPPRESSION_ENABLED:
+        return False, None, None
+    try:
+        engine = SuppressionEngine.singleton()
+    except Exception as e:  # noqa: BLE001
+        print(f"⚠️  suppression engine 초기화 실패: {e}")
+        return False, None, None
+
+    # 출발·도착 공항, icao24 중 하나라도 매칭되면 suppress.
+    for airport in (req.origin, req.dest):
+        sup, reason, kind = engine.matches(airport=airport, icao24=req.icao24)
+        if sup:
+            # Audit log to Redis Stream (best-effort).
+            if r is not None:
+                try:
+                    r.xadd(REDIS_ANOMALY_SUPPRESS_AUDIT, {
+                        "flight_id": req.flight_id or "",
+                        "icao24": req.icao24 or "",
+                        "airport": airport or "",
+                        "phase": phase or "",
+                        "reason": reason or "",
+                        "kind": kind or "",
+                        "ts": datetime.now(timezone.utc).isoformat(),
+                    }, maxlen=10000, approximate=True)
+                except Exception:
+                    pass
+            return True, reason, kind
+    return False, None, None
+
+
 @router.post("/detect/anomaly", response_model=AnomalyResponse)
 def detect_anomaly(req: AnomalyRequest) -> AnomalyResponse:
-    """Isolation Forest 이상 탐지 (P2 phase-aware + debounce)."""
+    """Isolation Forest 이상 탐지 — phase-aware + hysteresis + suppression + debounce.
+
+    Alert discipline 파이프라인 (v2.1.10 · ADR-006):
+      1. Resolve flight phase (explicit req / Redis / none)
+      2. Suppression check (maintenance / weather / airport closure)
+         → 매칭 시 is_anomaly=False, suppressed=true, audit log
+      3. Route to per-phase IF model (7개 중 하나, 없으면 base fallback)
+      4. Compute score / pred
+      5. Hysteresis state machine (enter=-0.15, exit=-0.05)
+      6. Debounce (same flight 60 s, critical 제외)
+      7. Final AnomalyResponse — alert_state/model_source 추가
+    """
     t0 = time.time()
+    r = get_redis()
+
     with tracer.start_as_current_span("if_inference") as span:
+        # ── (1) Phase 결정 ────────────────────────────────────────
+        phase, phase_confidence = _resolve_phase(req, r)
+        if phase:
+            span.set_attribute("flight_phase", phase)
+
+        # ── (2) Suppression 체크 (모델 호출 전 short-circuit) ─────
+        sup_suppressed, sup_reason, sup_kind = _check_suppression(req, phase, r)
+        if sup_suppressed:
+            span.set_attribute("suppressed", True)
+            span.set_attribute("suppress_kind", sup_kind or "")
+            latency = (time.time() - t0) * 1000
+            return AnomalyResponse(
+                flight_id=req.flight_id,
+                anomaly_score=0.0,
+                is_anomaly=False,
+                risk_level="normal",
+                latency_ms=round(latency, 1),
+                flight_phase=phase,
+                phase_confidence=phase_confidence,
+                suppressed=True,
+                suppress_reason=f"{sup_kind}:{sup_reason}" if sup_kind else sup_reason,
+                alert_state="clear",
+                model_source=None,
+            )
+
+        # ── (3) Per-phase 모델 라우팅 ─────────────────────────────
         try:
-            model = ModelStore.isolation_forest()
+            model, resolved_phase, model_source = ModelStore.isolation_forest_for_phase(phase)
         except RuntimeError as e:
             raise HTTPException(status_code=503, detail=str(e))
+        span.set_attribute("model_source", model_source)
 
+        # ── (4) Inference ────────────────────────────────────────
         row = {f: getattr(req, f) for f in IF_FEATURES}
         X = pd.DataFrame([row])[IF_FEATURES]
-
         try:
             score = float(model.decision_function(X)[0])
             pred = int(model.predict(X)[0])
         except Exception as e:
             raise HTTPException(status_code=500, detail=f"이상 탐지 오류: {e}")
-
         span.set_attribute("anomaly_score", score)
-        span.set_attribute("is_anomaly", pred == -1)
 
-        is_anomaly = (pred == -1) or (score < IF_SCORE_THRESHOLD)
+        # ── (5) Hysteresis state machine ─────────────────────────
+        is_alerting, alert_state = _apply_hysteresis(req.flight_id, score, r)
+        # 모델의 raw 예측도 고려 — IF 가 강하게 -1 을 주면 alerting 강제.
+        is_anomaly = is_alerting or (pred == -1 and score < IF_SCORE_ENTER)
+        span.set_attribute("alert_state", alert_state)
 
+        # risk_level — hysteresis 반영
         if score < -0.2:
             risk_level = "critical"
-        elif score < IF_SCORE_THRESHOLD:
+        elif is_alerting:
             risk_level = "warning"
         else:
             risk_level = "normal"
 
-        # P2 · flight_phase + debounce
-        flight_phase = None
-        phase_confidence = None
+        # ── (6) Debounce (기존 로직 유지) ─────────────────────────
         suppressed = False
         suppress_reason = None
+        if is_anomaly and risk_level != "critical" and req.flight_id and r is not None:
+            dkey = REDIS_ANOMALY_DEBOUNCE.format(req.flight_id, "IF_DETECT")
+            try:
+                if r.exists(dkey):
+                    suppressed = True
+                    suppress_reason = "debounce_60s_same_flight"
+                else:
+                    r.setex(dkey, 60, "1")
+            except Exception:
+                pass
 
-        if req.flight_id:
-            r = get_redis()
-            if r is not None:
-                try:
-                    phase_data = r.hgetall(REDIS_AIRCRAFT_PHASE.format(req.flight_id))
-                    if phase_data:
-                        flight_phase = phase_data.get("phase")
-                        conf_str = phase_data.get("confidence")
-                        if conf_str:
-                            phase_confidence = float(conf_str)
-                except Exception:
-                    pass
-
-                if is_anomaly and risk_level != "critical":
-                    dkey = REDIS_ANOMALY_DEBOUNCE.format(req.flight_id, "IF_DETECT")
-                    try:
-                        if r.exists(dkey):
-                            suppressed = True
-                            suppress_reason = "debounce_60s_same_flight"
-                        else:
-                            r.setex(dkey, 60, "1")
-                    except Exception:
-                        pass
-
-        if flight_phase:
-            span.set_attribute("flight_phase", flight_phase)
         if suppressed:
             span.set_attribute("suppressed", True)
 
@@ -114,10 +251,12 @@ def detect_anomaly(req: AnomalyRequest) -> AnomalyResponse:
         is_anomaly=is_anomaly,
         risk_level=risk_level,
         latency_ms=round(latency, 1),
-        flight_phase=flight_phase,
+        flight_phase=phase,
         phase_confidence=phase_confidence,
         suppressed=suppressed,
         suppress_reason=suppress_reason,
+        alert_state=alert_state,
+        model_source=model_source,
     )
 
 
@@ -481,4 +620,111 @@ def approve_advisory(req: AnomalyApprovalRequest) -> AnomalyApprovalResponse:
         advisory_id=req.advisory_id,
         decision=req.decision,
         audit_trace_id=trace_id or None,
+    )
+
+
+# ──────────────────────────────────────────────────────────────────────
+# v2.1.10 · ADR-006 D4 · GET /alerts/triage — 실시간 분석가 triage 큐
+# ──────────────────────────────────────────────────────────────────────
+SEVERITY_WEIGHT = {
+    "CRITICAL": 1.0,
+    "HIGH": 0.7,
+    "MEDIUM": 0.4,
+    "LOW": 0.2,
+}
+
+
+def _parse_ts_to_age(ts_raw) -> float:
+    """Return age in seconds. Supports ISO8601 string, epoch float, or None."""
+    if ts_raw is None:
+        return 0.0
+    try:
+        if isinstance(ts_raw, (int, float)):
+            epoch = float(ts_raw)
+        else:
+            s = str(ts_raw)
+            if s.endswith("Z"):
+                s = s[:-1] + "+00:00"
+            epoch = datetime.fromisoformat(s).timestamp()
+        return max(0.0, datetime.now(timezone.utc).timestamp() - epoch)
+    except Exception:
+        return 0.0
+
+
+@router.get("/alerts/triage", response_model=TriageResponse)
+def get_alert_triage(limit: int = 10, include_labeled: bool = False):
+    """Real-time analyst triage queue — composite = severity × (1 + uncertainty).
+
+    v2.1.10 · ADR-006 D4.
+
+    Active Learning 과의 차이:
+      - `/active-learning/next` → "label what we're unsure about" — uncertainty 최대화
+      - `/alerts/triage` → "what should analyst SEE FIRST" — severity × uncertainty
+
+    운영자가 대시보드를 처음 열었을 때 "가장 시급한 K 개"를 보여주는 용도.
+    이미 라벨된 알람은 기본적으로 제외 (include_labeled=True 로 포함 가능).
+
+    Returns: top-K items sorted by composite_score desc.
+    """
+    generated_at = datetime.now(timezone.utc).isoformat()
+    limit = max(1, min(100, int(limit)))
+
+    r = get_redis()
+    if r is None:
+        return TriageResponse(
+            items=[], total_considered=0, returned_count=0, generated_at=generated_at,
+        )
+
+    try:
+        raw_events = r.lrange(REDIS_ANOMALY_STREAM, 0, 499)
+    except Exception as e:
+        print(f"⚠️  /alerts/triage Redis 조회 실패: {e}")
+        return TriageResponse(
+            items=[], total_considered=0, returned_count=0, generated_at=generated_at,
+        )
+
+    labeled = set() if include_labeled else _load_labeled_alert_ids()
+
+    candidates: list[TriageItem] = []
+    for raw in raw_events:
+        try:
+            evt = _json.loads(raw)
+        except _json.JSONDecodeError:
+            continue
+        alert_id = evt.get("alert_id", "")
+        if not alert_id:
+            continue
+        already_labeled = alert_id in labeled
+        if already_labeled and not include_labeled:
+            continue
+
+        score = float(evt.get("anomaly_score", -0.15) or -0.15)
+        severity = str(evt.get("severity", "LOW")).upper()
+        sev_w = SEVERITY_WEIGHT.get(severity, 0.2)
+        unc = _uncertainty_score(score, severity)
+        composite = sev_w * (1.0 + unc)
+
+        candidates.append(TriageItem(
+            alert_id=alert_id,
+            anomaly_score=score,
+            anomaly_type=evt.get("anomaly_type", "UNKNOWN"),
+            severity=severity,
+            severity_weight=sev_w,
+            uncertainty_score=unc,
+            composite_score=round(composite, 4),
+            flight_phase=evt.get("flight_phase"),
+            icao24=evt.get("icao24"),
+            callsign=evt.get("callsign"),
+            description=str(evt.get("description", ""))[:300],
+            alert_age_sec=round(_parse_ts_to_age(evt.get("event_timestamp") or evt.get("ts")), 1),
+            already_labeled=already_labeled,
+        ))
+
+    candidates.sort(key=lambda x: x.composite_score, reverse=True)
+    top = candidates[:limit]
+    return TriageResponse(
+        items=top,
+        total_considered=len(candidates),
+        returned_count=len(top),
+        generated_at=generated_at,
     )

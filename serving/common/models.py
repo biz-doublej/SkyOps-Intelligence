@@ -85,6 +85,11 @@ class AnomalyRequest(BaseModel):
     route_hist_delay: float = Field(0.0)
     # 선택 메타
     flight_id: Optional[str] = Field(None, description="항공편 식별자 (로그용 + Redis phase 조회)")
+    # v2.1.10 · ADR-006 — phase 를 요청이 직접 지정하면 Redis 조회 없이 바로 routing.
+    flight_phase: Optional[str] = Field(None, description="TAXI|TAKEOFF|CLIMB|CRUISE|DESCENT|APPROACH|LANDING")
+    origin: Optional[str] = Field(None, description="출발 공항 (suppression 매칭용)")
+    dest: Optional[str] = Field(None, description="도착 공항 (suppression 매칭용)")
+    icao24: Optional[str] = Field(None, description="ICAO24 hex (suppression 매칭용)")
 
 
 class AnomalyResponse(BaseModel):
@@ -98,6 +103,9 @@ class AnomalyResponse(BaseModel):
     phase_confidence: Optional[float] = None
     suppressed: bool = False  # debounce로 억제되었는가
     suppress_reason: Optional[str] = None
+    # v2.1.10 · ADR-006 · Alert discipline diagnostics
+    alert_state: Optional[str] = None  # "clear" | "alerting" (hysteresis)
+    model_source: Optional[str] = None  # "phase_model" | "base_fallback"
 
 
 class AnomalyFeedbackRequest(BaseModel):
@@ -193,6 +201,38 @@ class ActiveLearningQuery(BaseModel):
     total_pending: int = Field(..., description="Redis stream 내 unlabeled 총 건수")
     returned_count: int
     query_strategy: str = "uncertainty_sampling_v1"
+    generated_at: str  # ISO 8601 UTC
+
+
+# ── v2.1.10 · ADR-006 · Alert triage (운영 중 분석가 큐) ──────────────
+class TriageItem(BaseModel):
+    """운영 중 실시간 분석가 triage 큐 항목.
+
+    ActiveLearningItem 과 달리 "라벨링 용" 이 아니라 "즉시 대응 용" — severity 와
+    uncertainty 를 곱한 composite_score 로 정렬된다.
+    """
+    alert_id: str
+    anomaly_score: float
+    anomaly_type: str
+    severity: str
+    severity_weight: float = Field(..., ge=0.0, le=1.0,
+                                    description="CRITICAL=1.0, HIGH=0.7, MEDIUM=0.4, LOW=0.2")
+    uncertainty_score: float = Field(..., ge=0.0, le=1.0)
+    composite_score: float = Field(..., ge=0.0,
+                                    description="severity_weight × (1 + uncertainty)")
+    flight_phase: Optional[str] = None
+    icao24: Optional[str] = None
+    callsign: Optional[str] = None
+    description: str
+    alert_age_sec: float = Field(..., description="알람 발생 후 경과 시간")
+    already_labeled: bool = Field(False, description="분석가가 이미 라벨 완료했는가")
+
+
+class TriageResponse(BaseModel):
+    """`/alerts/triage` 응답."""
+    items: list[TriageItem]
+    total_considered: int
+    returned_count: int
     generated_at: str  # ISO 8601 UTC
 
 

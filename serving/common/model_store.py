@@ -18,8 +18,10 @@ from .constants import (
     CONFORMAL_PATH,
     CONFORMAL_PATH_CQR,
     IF_MODEL_PATH,
+    IF_PHASES,
     PROJECT_ROOT,
     XGB_MODEL_PATH,
+    if_model_path_for_phase,
 )
 
 RELOAD_SIGNAL = PROJECT_ROOT / "data" / "models" / ".reload_signal"
@@ -38,6 +40,7 @@ class ModelStore:
 
     _xgb = None
     _if = None
+    _if_by_phase: dict = {}  # v2.1.10 ADR-006 — per-phase IF cache {PHASE: model}
     _rag = None
     _conformal = None
     _last_reload_mtime: float = 0.0
@@ -54,6 +57,7 @@ class ModelStore:
         if mtime > cls._last_reload_mtime:
             cls._xgb = None
             cls._if = None
+            cls._if_by_phase = {}  # v2.1.10 — phase caches 도 invalidate
             cls._conformal = None
             # _rag intentionally NOT reloaded (heavy; manual restart)
             cls._last_reload_mtime = mtime
@@ -70,6 +74,7 @@ class ModelStore:
 
     @classmethod
     def isolation_forest(cls):
+        """Base (phase-agnostic) Isolation Forest — fallback path."""
         cls._check_reload()
         if cls._if is None:
             if not IF_MODEL_PATH.exists():
@@ -77,6 +82,43 @@ class ModelStore:
             with open(IF_MODEL_PATH, "rb") as f:
                 cls._if = pickle.load(f)
         return cls._if
+
+    @classmethod
+    def isolation_forest_for_phase(cls, phase: str | None):
+        """Return the per-phase IF model, or fall back to base IF.
+
+        v2.1.10 · ADR-006 D1 — training side had 7 separate models
+        (data/models/isolation_forest_{PHASE}.pkl) but serving was loading only
+        the base pkl. This method resolves the right model per phase with an
+        in-process LRU-style dict cache.
+
+        Args:
+            phase: e.g. "CRUISE" / "APPROACH" / None.
+                   None or unknown phase → base model (strict fallback).
+
+        Returns:
+            (model, resolved_phase, source)
+            source = "phase_model" | "base_fallback"
+        """
+        cls._check_reload()
+        norm = (phase or "").upper()
+        if norm not in IF_PHASES:
+            return cls.isolation_forest(), None, "base_fallback"
+
+        if norm in cls._if_by_phase:
+            return cls._if_by_phase[norm], norm, "phase_model"
+
+        path = if_model_path_for_phase(norm)
+        if not path.exists():
+            # Phase model 없으면 base 로 조용히 fallback (운영 안정성).
+            return cls.isolation_forest(), norm, "base_fallback"
+        try:
+            with open(path, "rb") as f:
+                cls._if_by_phase[norm] = pickle.load(f)
+            return cls._if_by_phase[norm], norm, "phase_model"
+        except Exception as e:  # noqa: BLE001
+            print(f"⚠️  phase={norm} IF 로드 실패 ({e}) → base fallback")
+            return cls.isolation_forest(), norm, "base_fallback"
 
     @classmethod
     def conformal(cls):

@@ -81,6 +81,33 @@ NETWORK_FEATURES = GRAPH_FEATURES_AIRPORT + GRAPH_FEATURES_ROUTE + UPSTREAM_DELA
 # IF 이상 판정 임계값 (6주차 기준)
 IF_SCORE_THRESHOLD = -0.1  # score < threshold → 이상
 
+# ── Stage 3 / ADR-006 · Alert Discipline (v2.1.10) ─────────────────
+# Hysteresis — 진입 / 탈출 임계값 분리로 플래핑 방지.
+# score < ENTER 면 alerting 진입, score > EXIT 이면 clear 로 탈출.
+# 두 값 사이 (band) 에 있으면 기존 state 유지.
+IF_SCORE_ENTER = float(os.getenv("IF_SCORE_ENTER", "-0.15"))  # 더 엄격
+IF_SCORE_EXIT = float(os.getenv("IF_SCORE_EXIT", "-0.05"))    # 더 관대
+# Hysteresis state TTL (초) — 비활성 flight 는 자동 만료.
+IF_HYSTERESIS_TTL_SEC = int(os.getenv("IF_HYSTERESIS_TTL_SEC", "900"))
+
+# Per-phase Isolation Forest — 학습 시 7개 모델이 별도 파일로 저장됨.
+# serving 은 AnomalyRequest.phase (or Redis 조회) 에 따라 해당 모델을 로드.
+IF_PHASES = ["TAXI", "TAKEOFF", "CLIMB", "CRUISE", "DESCENT", "APPROACH", "LANDING"]
+
+def if_model_path_for_phase(phase: str):
+    """Phase 이름 → 해당 모델 파일 경로. 없으면 base IF 로 fallback."""
+    phase = (phase or "").upper()
+    if phase in IF_PHASES:
+        return MODELS_DIR / f"isolation_forest_{phase}.pkl"
+    return IF_MODEL_PATH
+
+# Alert suppression config 파일 — v2.1.10 ADR-006 D3.
+SUPPRESSION_CONFIG = PROJECT_ROOT / "config" / "alert_suppression.yaml"
+
+# Redis key patterns — hysteresis + suppression audit log
+REDIS_ANOMALY_HYSTERESIS = "skyops:anomaly:hysteresis:{}"   # .format(flight_id)
+REDIS_ANOMALY_SUPPRESS_AUDIT = "skyops:anomaly:suppress:audit"  # Redis Stream
+
 # ── vLLM 설정 ─────────────────────────────────────────────────────────
 VLLM_BASE_URL = os.getenv("VLLM_BASE_URL", "http://localhost:8001/v1")
 LLM_MODEL_ID = os.getenv("LLM_MODEL_ID", "aviation-llm")
@@ -94,4 +121,4 @@ REDIS_ANOMALY_DEBOUNCE = "skyops:anomaly:debounce:{}:{}"   # P2 (2026-04-14)
 REDIS_NOTAM_STREAM = "skyops:notam:stream"                 # P6-G (2026-04-15)
 
 # Version
-API_VERSION = "2.1.9"  # 2026-04-19 — ADR-005 Stage 2 Network-aware (graph features + upstream delay + CQR serving)
+API_VERSION = "2.1.10"  # 2026-04-19 — ADR-006 Stage 3 Operable Anomaly Stack (per-phase routing + hysteresis + suppression + triage)
