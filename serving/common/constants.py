@@ -22,7 +22,8 @@ PROJECT_ROOT = DATA_DIR.parent  # 하위 호환
 MODELS_DIR = DATA_DIR / "models"
 XGB_MODEL_PATH = MODELS_DIR / "xgboost_best.pkl"
 IF_MODEL_PATH = MODELS_DIR / "isolation_forest.pkl"
-CONFORMAL_PATH = MODELS_DIR / "conformal_calibrator.pkl"  # P1 (2026-04-14)
+CONFORMAL_PATH = MODELS_DIR / "conformal_calibrator.pkl"  # P1 (2026-04-14) — symmetric split conformal
+CONFORMAL_PATH_CQR = MODELS_DIR / "conformal_calibrator_cqr.pkl"  # v2.1.9 ADR-005 — Conformalized Quantile Regression (asymmetric)
 
 FEEDBACK_DIR = DATA_DIR / "analyst_feedback"  # P2 (2026-04-14)
 FEEDBACK_FILE = FEEDBACK_DIR / "feedback.jsonl"
@@ -58,6 +59,25 @@ IF_FEATURES = [
     "dest_hist_delay", "route_hist_delay",
 ]
 
+# ── Stage 2 / ADR-005 ── Network-aware features (v2.1.9)
+# 아직 production 모델 (xgboost_best.pkl) 에 포함되지 않음. 다음 retrain cycle
+# 에서 NUMERIC_FEATURES 에 추가 예정. 지금은 training script + feature store 에서만 사용.
+GRAPH_FEATURES_AIRPORT = [
+    "origin_degree_total", "origin_pagerank", "origin_airport_hub_score",
+    "dest_degree_total", "dest_pagerank", "dest_airport_hub_score",
+]
+GRAPH_FEATURES_ROUTE = [
+    "route_volume", "route_rank", "route_degree_product", "route_hub_to_hub",
+]
+UPSTREAM_DELAY_FEATURES = [
+    "origin_recent_delay_avg_60m", "origin_recent_delay_p95_60m",
+    "origin_recent_volume_60m",
+    "dest_recent_delay_avg_60m", "dest_recent_volume_60m",
+    "origin_hub_congestion_ratio",
+]
+# 다음 retrain 에 포함될 후보 set — training_pipeline 에서 ALL_FEATURES + NETWORK_FEATURES.
+NETWORK_FEATURES = GRAPH_FEATURES_AIRPORT + GRAPH_FEATURES_ROUTE + UPSTREAM_DELAY_FEATURES
+
 # IF 이상 판정 임계값 (6주차 기준)
 IF_SCORE_THRESHOLD = -0.1  # score < threshold → 이상
 
@@ -74,4 +94,4 @@ REDIS_ANOMALY_DEBOUNCE = "skyops:anomaly:debounce:{}:{}"   # P2 (2026-04-14)
 REDIS_NOTAM_STREAM = "skyops:notam:stream"                 # P6-G (2026-04-15)
 
 # Version
-API_VERSION = "2.1.8"  # 2026-04-19 — ADR-004 Stage 1 Foundation 정직성 (walk-forward + Iceberg REST + Registry)
+API_VERSION = "2.1.9"  # 2026-04-19 — ADR-005 Stage 2 Network-aware (graph features + upstream delay + CQR serving)

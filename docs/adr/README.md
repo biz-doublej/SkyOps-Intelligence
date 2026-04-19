@@ -13,6 +13,7 @@ MADR(Markdown Architecture Decision Records) 템플릿을 사용합니다.
 | [002](ADR-002-api-gateway-selection.md) | API Gateway Selection — Traefik v3 for ADR-001 Phase 3 | **Proposed** | 2026-04-14 |
 | [003](ADR-003-multi-region-deployment.md) | Multi-Region Deployment — Hybrid active-active read + KR primary write | **Proposed** | 2026-04-15 |
 | [004](ADR-004-foundation-honesty.md) | Foundation 정직성 — Walk-forward eval + Schema contract + Iceberg REST catalog + OpenLineage/MLflow Registry | **Accepted** | 2026-04-19 |
+| [005](ADR-005-network-aware-model.md) | Network-aware Model — Rotation + Graph topology + Upstream delay state + CQR (GNN Proposed) | **Accepted** (D1/D2-Static/D2-Upstream/D3), **Proposed** (D2-GNN) | 2026-04-19 |
 
 ---
 

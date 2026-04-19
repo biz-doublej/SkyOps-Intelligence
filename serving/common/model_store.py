@@ -16,6 +16,7 @@ from pathlib import Path
 
 from .constants import (
     CONFORMAL_PATH,
+    CONFORMAL_PATH_CQR,
     IF_MODEL_PATH,
     PROJECT_ROOT,
     XGB_MODEL_PATH,
@@ -79,16 +80,42 @@ class ModelStore:
 
     @classmethod
     def conformal(cls):
-        """MAPIE SplitConformalRegressor calibrator (P1 · 2026-04-14).
+        """MAPIE conformal calibrator — CQR 우선, 그 다음 symmetric split.
 
-        analysis/conformal_calibration.py에서 생성. 없으면 None 반환(fallback).
+        우선순위 (v2.1.9 · ADR-005 D3):
+          1. conformal_calibrator_cqr.pkl (CQR · asymmetric interval)
+          2. conformal_calibrator.pkl     (Split Conformal · symmetric)
+          3. None → serving 은 point estimate 만 반환
+
+        두 artifact 가 모두 존재하면 CQR 을 load 하되 payload 에
+        `calibration_method = "cqr_mapie"` 필드를 덧붙여 _apply_conformal 이
+        method 문자열을 적절히 만든다.
         """
         cls._check_reload()
-        if cls._conformal is None and CONFORMAL_PATH.exists():
+        if cls._conformal is not None:
+            return cls._conformal
+
+        # 1) CQR 우선
+        if CONFORMAL_PATH_CQR.exists():
+            try:
+                with open(CONFORMAL_PATH_CQR, "rb") as f:
+                    payload = pickle.load(f)
+                if isinstance(payload, dict):
+                    payload.setdefault("calibration_method", "cqr_mapie")
+                cls._conformal = payload
+                return cls._conformal
+            except Exception as e:  # noqa: BLE001
+                print(f"⚠️  CQR calibrator 로드 실패 ({e}) → symmetric 로 fallback")
+
+        # 2) Symmetric split conformal
+        if CONFORMAL_PATH.exists():
             try:
                 with open(CONFORMAL_PATH, "rb") as f:
-                    cls._conformal = pickle.load(f)
-            except Exception as e:
+                    payload = pickle.load(f)
+                if isinstance(payload, dict):
+                    payload.setdefault("calibration_method", "split_conformal")
+                cls._conformal = payload
+            except Exception as e:  # noqa: BLE001
                 print(f"⚠️  Conformal calibrator 로드 실패 ({e}) → fallback to point estimate")
                 cls._conformal = None
         return cls._conformal

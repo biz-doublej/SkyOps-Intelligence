@@ -21,7 +21,11 @@ tracer = get_tracer("delay")
 
 
 def _apply_conformal(model, X_prep, pred: float) -> PredictionInterval | None:
-    """Try Conformal interval, None if calibrator missing or fails."""
+    """Try Conformal interval, None if calibrator missing or fails.
+
+    v2.1.9 · ADR-005 D3 — CQR artifact 가 있으면 asymmetric interval 을 반환하고
+    method 문자열을 "cqr_mapie_v{…}" 로 표기. 없으면 symmetric split conformal.
+    """
     conformal = ModelStore.conformal()
     if conformal is None or X_prep is None:
         return None
@@ -35,12 +39,18 @@ def _apply_conformal(model, X_prep, pred: float) -> PredictionInterval | None:
         else:
             lower = float(y_int[0, 0])
             upper = float(y_int[0, 1])
+        calib_method = conformal.get("calibration_method", "split_conformal")
+        mapie_ver = conformal.get("mapie_version", "1.3.0")
+        method_str = (
+            f"cqr_mapie_v{mapie_ver}" if calib_method == "cqr_mapie"
+            else f"split_conformal_mapie_v{mapie_ver}"
+        )
         return PredictionInterval(
             lower_min=round(lower, 1),
             upper_min=round(upper, 1),
             confidence=float(conformal.get("confidence_level", 0.9)),
             width_min=round(upper - lower, 1),
-            method=f"split_conformal_mapie_v{conformal.get('mapie_version', '1.3.0')}",
+            method=method_str,
         )
     except Exception as e:
         print(f"⚠️  Conformal prediction 실패: {e}")
@@ -149,7 +159,7 @@ def predict_delay_batch(requests: list[DelayRequest]):
         except Exception as e:
             raise HTTPException(status_code=500, detail=f"배치 예측 오류: {e}")
 
-        # Conformal intervals for each row
+        # Conformal intervals for each row — CQR 있으면 asymmetric (v2.1.9)
         intervals: list[dict | None] = [None] * len(preds)
         conformal = ModelStore.conformal()
         if conformal is not None and X_prep is not None:
@@ -162,13 +172,19 @@ def predict_delay_batch(requests: list[DelayRequest]):
                     lowers, uppers = y_int[:, 0, 0], y_int[:, 1, 0]
                 else:
                     lowers, uppers = y_int[:, 0], y_int[:, 1]
+                calib_method = conformal.get("calibration_method", "split_conformal")
+                mapie_ver = conformal.get("mapie_version", "1.3.0")
+                method_str = (
+                    f"cqr_mapie_v{mapie_ver}" if calib_method == "cqr_mapie"
+                    else f"split_conformal_mapie_v{mapie_ver}"
+                )
                 intervals = [
                     {
                         "lower_min": round(float(lo), 1),
                         "upper_min": round(float(up), 1),
                         "confidence": conf_level,
                         "width_min": round(float(up - lo), 1),
-                        "method": f"split_conformal_mapie_v{conformal.get('mapie_version', '1.3.0')}",
+                        "method": method_str,
                     }
                     for lo, up in zip(lowers, uppers)
                 ]
