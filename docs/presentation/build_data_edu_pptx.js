@@ -283,23 +283,27 @@ function koEnText(slide, x, y, w, h, ko, en, opts = {}) {
 
     ex.chain.forEach((step, i) => {
       const y = 2.85 + i * 0.53;
+      // 박스 (wider cell so Korean/English don't overlap)
       s.addShape(pres.shapes.RECTANGLE, {
-        x: ex.x + 0.25, y, w: 3.8, h: 0.42, fill: { color: C.ice },
+        x: ex.x + 0.2, y, w: 3.9, h: 0.4, fill: { color: C.ice },
         line: { color: ex.color, width: 1 },
       });
-      s.addText(`${step}  `, {
-        x: ex.x + 0.3, y: y + 0.03, w: 2.2, h: 0.36, fontSize: 11, bold: true,
+      // 한글 라벨 — 왼쪽 고정 폭
+      s.addText(step, {
+        x: ex.x + 0.3, y, w: 2.0, h: 0.4, fontSize: 11, bold: true,
         color: C.navy, fontFace: FONT_T, margin: 0, valign: "middle",
       });
+      // 영문 — 우측 끝까지
       s.addText(ex.chainEn[i], {
-        x: ex.x + 2.4, y: y + 0.05, w: 1.7, h: 0.32, fontSize: 9,
+        x: ex.x + 2.35, y, w: 1.75, h: 0.4, fontSize: 9,
         color: C.mute, italic: true, fontFace: FONT_B, margin: 0, valign: "middle",
         align: "right",
       });
+      // 화살표 — 박스 바깥 아래, 다음 박스 위로 안 넘어가게
       if (i < ex.chain.length - 1) {
-        s.addText("↓", {
-          x: ex.x + 1.9, y: y + 0.41, w: 0.5, h: 0.12, fontSize: 14,
-          color: ex.color, bold: true, align: "center", valign: "middle", margin: 0,
+        s.addShape(pres.shapes.LINE, {
+          x: ex.x + 2.0, y: y + 0.42, w: 0, h: 0.08,
+          line: { color: ex.color, width: 2, endArrowType: "triangle" },
         });
       }
     });
@@ -893,47 +897,50 @@ function koEnText(slide, x, y, w, h, ko, en, opts = {}) {
   s.background = { color: C.cream };
   addHeader(s, "CHAPTER 05 · PREPROCESSING", "전처리 6단계 파이프라인", "The 6-Step Preprocessing Pipeline");
 
+  // 단계별 메타 — 이모지 제거, 단계 이니셜 텍스트로 대체 (PPT 호환성)
   const steps = [
-    { n: 1, icon: "🧹", ko: "정제\nClean",      sub: "결측·이상·중복",    color: C.coral },
-    { n: 2, icon: "🩹", ko: "결측값\nMissing", sub: "drop / impute / xgb", color: C.amber },
-    { n: 3, icon: "🛠", ko: "Feature\nEng.",   sub: "시간·거리 분해",    color: C.teal },
-    { n: 4, icon: "🔄", ko: "Rotation\nFeats", sub: "P1 · +335% R²",      color: C.skyBlue },
-    { n: 5, icon: "📏", ko: "Split\n분할",     sub: "TimeSeriesSplit",    color: C.purple },
-    { n: 6, icon: "🧊", ko: "Iceberg\n저장",   sub: "Bronze/Silver/Gold", color: C.green },
+    { n: 1, abbr: "CLN", ko: "정제 Clean",           sub: "결측·이상·중복",    color: C.coral },
+    { n: 2, abbr: "NA",  ko: "결측값 Missing",       sub: "drop / impute / xgb", color: C.amber },
+    { n: 3, abbr: "FE",  ko: "Feature Eng.",         sub: "시간·거리 분해",      color: C.teal },
+    { n: 4, abbr: "ROT", ko: "Rotation Feats",       sub: "P1 · +335% R²",       color: C.skyBlue },
+    { n: 5, abbr: "SPL", ko: "Split 분할",           sub: "TimeSeriesSplit",     color: C.purple },
+    { n: 6, abbr: "ICE", ko: "Iceberg 저장",         sub: "Bronze/Silver/Gold",  color: C.green },
   ];
 
   steps.forEach((st, i) => {
     const x = 0.5 + i * 1.55;
-    // Bubble
+    // 큰 컬러 원 (main bubble)
     s.addShape(pres.shapes.OVAL, {
-      x: x + 0.25, y: 1.3, w: 1.0, h: 1.0, fill: { color: st.color }, line: { color: st.color },
+      x: x + 0.15, y: 1.3, w: 1.2, h: 1.2, fill: { color: st.color }, line: { color: st.color },
     });
-    s.addText(st.icon, {
-      x: x + 0.25, y: 1.3, w: 1.0, h: 1.0, fontSize: 28, color: C.white, align: "center", valign: "middle",
-      fontFace: FONT_T, margin: 0,
+    // 원 내부에 큰 abbr 텍스트
+    s.addText(st.abbr, {
+      x: x + 0.15, y: 1.3, w: 1.2, h: 1.2, fontSize: 19, bold: true, color: C.white,
+      fontFace: FONT_T, align: "center", valign: "middle", margin: 0,
+      charSpacing: 1,
     });
-    // Step number
+    // 단계 번호 — 메인 원 내부 좌상단에 작은 배지로 (overlap 제거)
     s.addShape(pres.shapes.OVAL, {
-      x: x + 0.05, y: 1.1, w: 0.45, h: 0.45, fill: { color: C.navy }, line: { color: st.color, width: 2 },
+      x: x + 0.05, y: 1.2, w: 0.42, h: 0.42, fill: { color: C.navy }, line: { color: C.white, width: 2 },
     });
     s.addText(String(st.n), {
-      x: x + 0.05, y: 1.1, w: 0.45, h: 0.45, fontSize: 14, bold: true, color: C.white,
+      x: x + 0.05, y: 1.2, w: 0.42, h: 0.42, fontSize: 13, bold: true, color: C.white,
       fontFace: FONT_T, align: "center", valign: "middle", margin: 0,
     });
-    // Label
+    // 라벨 (한/영 한 줄)
     s.addText(st.ko, {
-      x, y: 2.4, w: 1.5, h: 0.55, fontSize: 11, bold: true, color: C.navy,
+      x: x - 0.1, y: 2.6, w: 1.7, h: 0.35, fontSize: 11, bold: true, color: C.navy,
       fontFace: FONT_T, align: "center", margin: 0,
     });
     s.addText(st.sub, {
-      x, y: 2.95, w: 1.5, h: 0.35, fontSize: 9, color: C.mute, italic: true,
+      x: x - 0.1, y: 2.95, w: 1.7, h: 0.3, fontSize: 9, color: C.mute, italic: true,
       fontFace: FONT_B, align: "center", margin: 0,
     });
-    // Arrow to next
+    // 단계 간 화살표 (원 사이 중앙 정확히)
     if (i < steps.length - 1) {
-      s.addText("→", {
-        x: x + 1.25, y: 1.4, w: 0.35, h: 0.8, fontSize: 22, bold: true, color: C.amber,
-        align: "center", valign: "middle", margin: 0,
+      s.addShape(pres.shapes.LINE, {
+        x: x + 1.38, y: 1.9, w: 0.15, h: 0,
+        line: { color: C.amber, width: 3, endArrowType: "triangle" },
       });
     }
   });
@@ -982,8 +989,8 @@ function koEnText(slide, x, y, w, h, ko, en, opts = {}) {
     x: 0.7, y: 1.1, w: 8.6, h: 0.3, fontSize: 12, bold: true, color: C.coral, fontFace: FONT_T, margin: 0,
   });
 
-  // Header row
-  const cols = ["FL_DATE", "AIRLINE", "ORIGIN", "DEP_DELAY", "DISTANCE", "WEATHER_DELAY"];
+  // Header row — WEATHER_DELAY (항상 null) 제거하고 문제유형 컬럼 추가
+  const cols = ["FL_DATE", "AIRLINE", "ORIGIN", "DEP_DELAY", "DISTANCE", "문제 유형 / Issue"];
   const colX = [0.7, 2.0, 3.1, 4.1, 5.2, 6.3];
   const colW = [1.3, 1.1, 1.0, 1.0, 1.0, 3.0];
   cols.forEach((c, i) => {
@@ -992,36 +999,41 @@ function koEnText(slide, x, y, w, h, ko, en, opts = {}) {
     });
     s.addText(c, {
       x: colX[i], y: 1.5, w: colW[i], h: 0.3, fontSize: 9, bold: true, color: C.white,
-      fontFace: FONT_M, align: "center", valign: "middle", margin: 0,
+      fontFace: i === 5 ? FONT_T : FONT_M, align: "center", valign: "middle", margin: 0,
     });
   });
 
+  // 6-tuple: FL_DATE, AIRLINE, ORIGIN, DEP_DELAY, DISTANCE, ISSUE_LABEL
   const rows = [
-    ["2015-01-05", "UA",  "SFO",  "15",     "2586",  "null", "OK"],
-    ["2015-01-05", "UA",  "SFO",  "15",     "2586",  "null", "⚠ 중복 duplicate"],
-    ["2015-01-06", "",    "LAX",  "null",   "325",   "null", "⚠ 결측 missing"],
-    ["2015-01-07", "DL",  "JFK",  "-9999",  "2475",  "8",    "⚠ 센서오류 sentinel"],
-    ["2015-01-08", "AA",  "ORD",  "48",     "-1",    "null", "⚠ 거리 음수 invalid"],
-    ["2015-01-09", "WN",  "BWI",  "8",      "412",   "null", "✓ OK"],
+    ["2015-01-05", "UA",  "SFO",  "15",     "2586",  "OK"],
+    ["2015-01-05", "UA",  "SFO",  "15",     "2586",  "⚠ 중복 duplicate"],
+    ["2015-01-06", "",    "LAX",  "null",   "325",   "⚠ 결측 missing"],
+    ["2015-01-07", "DL",  "JFK",  "-9999",  "2475",  "⚠ 센서오류 sentinel"],
+    ["2015-01-08", "AA",  "ORD",  "48",     "-1",    "⚠ 거리 음수 invalid"],
+    ["2015-01-09", "WN",  "BWI",  "8",      "412",   "✓ OK"],
   ];
   rows.forEach((r, ri) => {
     const y = 1.82 + ri * 0.22;
-    const rowColor = r[6].startsWith("⚠") ? "FFF0F0" : C.white;
-    for (let i = 0; i < 6; i++) {
+    const rowColor = r[5].startsWith("⚠") ? "FFF0F0" : C.white;
+    for (let i = 0; i < 5; i++) {
+      // 데이터 셀 0-4 (FL_DATE ~ DISTANCE)
       s.addShape(pres.shapes.RECTANGLE, {
         x: colX[i], y, w: colW[i], h: 0.22, fill: { color: rowColor }, line: { color: "DDDDDD", width: 0.5 },
       });
       const cellColor = (r[i] === "null" || r[i] === "" || r[i] === "-9999" || r[i] === "-1") ? C.coral : C.slate;
-      s.addText(r[i], {
+      s.addText(r[i] === "" ? "—" : r[i], {
         x: colX[i], y, w: colW[i], h: 0.22, fontSize: 8.5, color: cellColor,
         fontFace: FONT_M, align: "center", valign: "middle", margin: 0,
         bold: (cellColor === C.coral),
       });
     }
-    // 라벨 (문제 유형)
-    const labelColor = r[6].startsWith("⚠") ? C.coral : C.green;
-    s.addText(r[6], {
-      x: 6.3, y, w: 3.1, h: 0.22, fontSize: 8.5, color: labelColor,
+    // 문제유형 셀 (컬럼 5) — 유일한 라벨 위치
+    s.addShape(pres.shapes.RECTANGLE, {
+      x: colX[5], y, w: colW[5], h: 0.22, fill: { color: rowColor }, line: { color: "DDDDDD", width: 0.5 },
+    });
+    const labelColor = r[5].startsWith("⚠") ? C.coral : C.green;
+    s.addText(r[5], {
+      x: colX[5] + 0.1, y, w: colW[5] - 0.1, h: 0.22, fontSize: 8.5, color: labelColor,
       fontFace: FONT_B, bold: true, align: "left", valign: "middle", margin: 0,
     });
   });
@@ -1192,14 +1204,15 @@ function koEnText(slide, x, y, w, h, ko, en, opts = {}) {
     fontFace: FONT_B, align: "center", margin: 0,
   });
 
-  // Arrow
-  s.addText("분해\ndecompose", {
-    x: 4.65, y: 1.9, w: 0.75, h: 0.8, fontSize: 11, bold: true, color: C.amber,
-    fontFace: FONT_T, align: "center", valign: "middle", margin: 0,
+  // Arrow — 양쪽 박스 사이 중앙, 텍스트 래핑 방지 위해 폭 확보
+  s.addShape(pres.shapes.LINE, {
+    x: 4.72, y: 1.95, w: 0.56, h: 0,
+    line: { color: C.amber, width: 4, endArrowType: "triangle" },
   });
-  s.addText("→", {
-    x: 4.55, y: 1.5, w: 0.9, h: 0.4, fontSize: 24, bold: true, color: C.amber,
-    align: "center", valign: "middle", margin: 0,
+  // "분해 / decompose" — 화살표 아래 가로로 짧게
+  s.addText("분해 decompose", {
+    x: 4.5, y: 2.15, w: 1.0, h: 0.3, fontSize: 10, bold: true, color: C.amber,
+    fontFace: FONT_T, align: "center", valign: "middle", margin: 0,
   });
 
   s.addShape(pres.shapes.ROUNDED_RECTANGLE, {
