@@ -175,11 +175,9 @@ function koEnText(slide, x, y, w, h, ko, en, opts = {}) {
   });
 
   s.addNotes(
-    "안녕하세요. 오늘은 SkyOps Intelligence 프로젝트의 '데이터'에 집중해서 설명드립니다. " +
-    "한국인 학생과 외국인 학생 모두 이해할 수 있도록 한글 설명 옆에 영어 핵심 용어를 병기했습니다. " +
-    "총 30 장, 약 25~30 분 예상입니다.\n\n" +
-    "Hello. Today's session focuses on the DATA side of SkyOps Intelligence. " +
-    "Korean and English key terms are shown side-by-side. 30 slides, ~25-30 min."
+    "안녕하세요. 빅데이터과 3 학년 정재원입니다. 오늘은 제가 속한 DoubleJ 팀이 만든 SkyOps Intelligence 프로젝트의 데이터 이야기를 해보려 합니다. " +
+    "이 프로젝트에서 데이터가 어떻게 수집되고, 어떻게 가공되고, 최종적으로 모델이 되는지를 중심으로 설명드리겠습니다. " +
+    "앞으로 30 장 동안, 여러분은 '원본 데이터 한 줄이 어떻게 관제사 화면의 알림 하나가 되는가' 라는 질문에 대한 답을 찾게 되실 겁니다."
   );
 }
 
@@ -221,10 +219,12 @@ function koEnText(slide, x, y, w, h, ko, en, opts = {}) {
 
   addFooter(s, 2);
   s.addNotes(
-    "이 5 가지를 마지막까지 기억해 주세요. 특히 3 번 '시계열 분할' 과 4 번 " +
-    "'feature engineering 의 위력' 은 실제 우리 프로젝트의 P0 / P1 sprint 에서 증명된 사례입니다.\n\n" +
-    "Keep these 5 goals in mind. Points 3 (time-ordered split) and 4 (feature engineering power) " +
-    "were proven in our actual P0 / P1 sprints."
+    "이 발표가 끝났을 때 여러분이 다섯 가지를 이해하시도록 구성했습니다. " +
+    "먼저 항공 데이터가 어떻게 생성되는지를 살펴보고, 이어서 raw 데이터를 어떻게 정제하는지, " +
+    "그리고 왜 시계열 분할이 중요한지와 temporal leakage 가 무엇인지를 다루겠습니다. " +
+    "그다음으로 Feature Engineering 이 모델을 어떻게 바꾸는지를 실제 사례 R² 335 퍼센트 개선 사례로 보여드리고, " +
+    "마지막으로 XGBoost 와 Isolation Forest 가 왜 선택됐는지 그 이유를 설명드립니다. " +
+    "특히 세 번째와 네 번째가 가장 중요합니다. 이 두 가지는 실제로 제가 진행한 프로젝트의 P0, P1 스프린트에서 숫자로 증명된 내용이라, 숫자 자체를 꼭 기억해 두시면 좋겠습니다."
   );
 }
 
@@ -311,8 +311,11 @@ function koEnText(slide, x, y, w, h, ko, en, opts = {}) {
 
   addFooter(s, 3);
   s.addNotes(
-    "데이터는 항상 같은 흐름입니다 — 센서(측정) → 숫자(digitize) → 저장(storage) → 모델(model). " +
-    "의료나 항공이나 본질은 같습니다. 이 4 단계를 계속 머릿속에 두세요."
+    "잠깐 기본으로 돌아가 보겠습니다. 데이터란 무엇일까요. 한마디로 말씀드리면, 데이터는 세상의 측정값입니다. " +
+    "의료에서는 체온계가 숫자를 만들고 EHR 데이터베이스를 거쳐 진단 모델로 흘러가고, " +
+    "항공에서는 레이더 수신기가 위도와 경도를 측정해서 Kafka 스트림을 거쳐 지연 예측 모델로 들어갑니다. " +
+    "센서, 숫자, 저장, 모델이라는 네 단계 구조는 어떤 도메인에서도 똑같이 반복됩니다. " +
+    "이 프레임을 머릿속에 두시면, 앞으로 나올 모든 슬라이드가 이 구조 안에 들어맞게 됩니다."
   );
 }
 
@@ -364,8 +367,11 @@ function koEnText(slide, x, y, w, h, ko, en, opts = {}) {
 
   addFooter(s, 4);
   s.addNotes(
-    "이 네 가지 특성이 왜 '아무 데이터나 쓰면 안 되는가' 를 설명합니다. " +
-    "실시간 · 고빈도 → Kafka 가 필요. 시계열 → shuffle 금지 (슬라이드 17). 다중 소스 → Schema Registry 필요 (슬라이드 11)."
+    "항공 데이터에는 네 가지 특별한 성질이 있습니다. " +
+    "첫째는 실시간 성질로 초 단위로 업데이트되기 때문에 1 분의 지연도 큰 의미를 갖고, 둘째는 고빈도 성질로 초당 수천 건이 쏟아져 들어옵니다. " +
+    "셋째는 시계열 성질인데 순서가 매우 중요해서 절대로 섞으면 안 되고, 넷째는 다중 소스 성질로 레이더와 기상, 관제 메시지가 모두 합쳐져야 비로소 의미가 생깁니다. " +
+    "이 네 가지 성질이 바로 아무 데이터나 아무 방식으로 쓰면 안 되는 이유입니다. " +
+    "실시간과 고빈도 때문에 Kafka 가 필요하고, 시계열이기 때문에 절대 shuffle 을 하면 안 되며, 다중 소스이기 때문에 Schema Registry 라는 계약이 필요합니다."
   );
 }
 
@@ -419,8 +425,12 @@ function koEnText(slide, x, y, w, h, ko, en, opts = {}) {
 
   addFooter(s, 5);
   s.addNotes(
-    "4 개 소스 중 3 번 FAA SWIM 이 가장 도전적이었고 가장 자랑스러운 성과입니다. " +
-    "나머지는 쉽게 접근 가능한 공개 데이터지만 SWIM 은 공식 구독 + TLS 인증서 + AIXM XML 파서가 모두 필요합니다."
+    "저는 이 프로젝트에서 총 네 가지 데이터 소스를 사용하고 있습니다. " +
+    "첫 번째는 OpenSky Network 로 전 세계 3만 5천 개 지상 수신기가 기여하는 공개 ADS-B 네트워크이고 10 초마다 항공기 위치가 업데이트됩니다. " +
+    "두 번째는 NOAA 와 KMA 의 METAR 데이터로 공항 기상 보고서이고 30 분 주기로 갱신되며, " +
+    "세 번째가 FAA SWIM 으로 미 연방항공청의 공식 System Wide Information Management 데이터입니다. " +
+    "네 번째는 Kaggle 의 flights.csv 로 오백칠십만 행 규모의 2015 년 배치 데이터입니다. " +
+    "별표가 붙은 SWIM 은 제가 이 프로젝트에서 가장 자랑스럽게 생각하는 플래그십 성과입니다."
   );
 }
 
@@ -433,7 +443,7 @@ function koEnText(slide, x, y, w, h, ko, en, opts = {}) {
   addHeader(s, "CHAPTER 03 · DATA SOURCES", "OpenSky ADS-B 작동 원리", "How ADS-B Works");
 
   // ADS-B flow diagram
-  // 비행기 → 방송 → 수신기 → OpenSky → 우리
+  // 비행기 → 방송 → 수신기 → OpenSky → 수집기
   const stages = [
     { icon: "✈️", ko: "항공기", en: "Aircraft", x: 0.5 },
     { icon: "📡", ko: "지상 수신기", en: "Ground receiver", x: 2.7 },
@@ -506,9 +516,10 @@ function koEnText(slide, x, y, w, h, ko, en, opts = {}) {
 
   addFooter(s, 6);
   s.addNotes(
-    "ADS-B 는 자동차의 블랙박스처럼 비행기가 스스로 자기 위치를 방송하는 시스템입니다. " +
-    "방송 → 땅의 수신기가 받음 → OpenSky 서버가 집계 → 우리가 API 로 받음. " +
-    "항공기 한 대당 17 개 필드가 10 초마다 들어옵니다."
+    "ADS-B 는 Automatic Dependent Surveillance-Broadcast 의 약자입니다. " +
+    "항공기가 자기 위치를 스스로 방송하면 지상 수신기가 받아서 OpenSky 서버의 API 로 전송합니다. " +
+    "제가 작성한 수집기가 30 초마다 OpenSky API 를 폴링해서 Kafka 의 flight-position 토픽으로 publish 하도록 구현했습니다. " +
+    "항공기 한 편당 업데이트마다 17 개 필드가 들어오고, 전 세계 3만 5천 대의 수신기가 대부분 자원봉사자에 의해 운영됩니다."
   );
 }
 
@@ -565,8 +576,11 @@ function koEnText(slide, x, y, w, h, ko, en, opts = {}) {
 
   addFooter(s, 7);
   s.addNotes(
-    "METAR 는 항공 기상의 국제 표준 포맷입니다. 겉보기엔 암호 같지만 토큰 하나하나가 정확한 의미를 가집니다. " +
-    "우리 코드는 이걸 파싱해서 JSON → Avro 로 변환해 Kafka 에 publish 합니다."
+    "두 번째 소스인 METAR 기상 보고서는 처음 보면 암호처럼 보이지만 함께 해독해 보면 어렵지 않습니다. " +
+    "한 줄의 METAR 가 일곱 개의 토큰으로 분해되는데, RKSI 는 인천공항 ICAO 코드, 030900Z 는 3 일 09 시 UTC 관측, " +
+    "29012KT 는 풍향 290 도 풍속 12 노트, 9999 는 가시거리 10 킬로미터 이상, SCT030 은 3000 피트에 부분운, " +
+    "08/M02 는 기온 8 도 이슬점 영하 2 도, Q1020 은 QNH 1020 헥토파스칼을 뜻합니다. " +
+    "이 포맷은 국제 항공 표준이라 전 세계가 공통으로 사용하고, 제가 작성한 파서가 이 문자열을 JSON 으로 파싱하고 다시 Avro 로 변환해 Kafka 에 넣습니다."
   );
 }
 
@@ -644,9 +658,11 @@ function koEnText(slide, x, y, w, h, ko, en, opts = {}) {
 
   addFooter(s, 8);
   s.addNotes(
-    "대학 캡스톤으로는 드물게 FAA 프로덕션 브로커에 직접 연결했습니다. " +
-    "219 건을 60 초 안에 파싱 에러 0 으로 받은 로그가 증거입니다. " +
-    "이게 가능했던 이유는 trust store 설정을 포기하지 않고 세 번 다시 했기 때문입니다."
+    "이 프로젝트에서 제가 가장 자랑스럽게 생각하는 플래그십 성과라 슬라이드 한 장을 통째로 썼습니다. " +
+    "미 연방항공청의 프로덕션 브로커에 직접 연결해서 60 초 안에 실제 NOTAM 219 건을 파싱 에러 0 건으로 수신했습니다. " +
+    "대학 캡스톤 프로젝트로서는 극히 드문 성과인데, 일반 REST API 가 아니라 Solace JMS 프로토콜을 써야 하고, TLS 1.2 인증서 검증이 필수이며, AIXM 5.1 표준 XML 파서를 직접 구현해야 했기 때문입니다. " +
+    "trust store 셋업을 세 번 연속 실패하고 네 번째에 성공했고, DigiCert Global Root G2 인증서를 수동으로 c_rehash 형식으로 import 하고 나서야 해결할 수 있었습니다. " +
+    "학부생 신분으로도 이런 인프라 수준의 integration 에 도전할 수 있다는 것을 보여드리고 싶어 실패 과정까지 공유드렸습니다."
   );
 }
 
@@ -747,8 +763,10 @@ function koEnText(slide, x, y, w, h, ko, en, opts = {}) {
 
   addFooter(s, 9);
   s.addNotes(
-    "EDA (Exploratory Data Analysis) 단계에서 가장 중요한 발견: 지연의 40% 가 '전편 지연' 에서 온다는 것. " +
-    "이게 P1 sprint 에서 rotation features 5 개를 추가하게 된 도메인 근거가 되었고, Test R² 를 3.35 배 올려줬습니다."
+    "네 번째 소스인 Kaggle 데이터는 배치 데이터로 오백칠십만 행 곱하기 31 컬럼, 용량은 580 메가바이트입니다. " +
+    "지연된 편이 전체의 38.8 퍼센트, 취소가 3.4 퍼센트, 평균 도착 지연이 6.2 분이고, 최대 지연은 무려 천구백칠십일 분, 즉 약 32 시간입니다. " +
+    "특히 중요한 발견은 전체 지연의 39.6 퍼센트가 '전편 지연' 즉 cascade 또는 reactionary 딜레이에서 발생한다는 점입니다. " +
+    "이 40 퍼센트라는 숫자가 뒤에 나올 Rotation features 의 도메인 근거가 되니 꼭 기억해 주시기 바랍니다."
   );
 }
 
@@ -822,8 +840,9 @@ function koEnText(slide, x, y, w, h, ko, en, opts = {}) {
 
   addFooter(s, 10);
   s.addNotes(
-    "같은 데이터를 JSON 으로 100 B, CSV 로 60 B, Avro 로 35 B 에 담습니다. " +
-    "초당 수천 건 오는 Kafka 에서는 이 차이가 누적되어 거대합니다. 그리고 무엇보다 Avro 는 스키마를 강제하기 때문에 장애가 줄어듭니다."
+    "똑같은 항공기 위치 한 건이라도 JSON 으로는 100 바이트, CSV 로는 60 바이트, Avro 로는 35 바이트에 담을 수 있습니다. " +
+    "초당 수천 건이 흐르는 Kafka 환경에서는 이 차이가 하루 누적 수십 기가바이트의 차이를 만듭니다. " +
+    "하지만 제가 Avro 를 선택한 가장 큰 이유는 크기보다 스키마 강제이고, 다음 슬라이드에서 자세히 설명드립니다."
   );
 }
 
@@ -883,9 +902,11 @@ function koEnText(slide, x, y, w, h, ko, en, opts = {}) {
 
   addFooter(s, 11);
   s.addNotes(
-    "Schema Registry 는 'producer 가 스키마를 바꿀 때 consumer 를 깨지 않도록' 강제하는 중앙 규칙 서버입니다. " +
-    "BACKWARD 호환 정책은 '새 consumer 가 옛 데이터도 읽을 수 있어야 한다' 는 뜻입니다. " +
-    "덕분에 장애 시 롤백이 안전합니다."
+    "스키마가 없으면 producer 가 새 필드를 추가했을 때 기존 consumer 가 옛 필드명을 기대하고 있기 때문에 KeyError 를 던지며 서비스가 다운됩니다. " +
+    "그리고 누가 언제 무엇을 바꿨는지 아무도 답할 수 없습니다. " +
+    "Schema Registry 에 BACKWARD 호환 정책을 적용해 두면, 호환이 깨지는 변경은 배포 전에 409 Conflict 응답으로 거부됩니다. " +
+    "호환되는 변경은 통과되고 기존 consumer 는 default 값으로 안전하게 동작합니다. " +
+    "BACKWARD 호환은 새 consumer 가 옛 데이터도 읽을 수 있어야 한다는 뜻이고, 덕분에 장애 상황에서 이전 버전으로 롤백하는 것이 안전해집니다."
   );
 }
 
@@ -968,8 +989,11 @@ function koEnText(slide, x, y, w, h, ko, en, opts = {}) {
 
   addFooter(s, 12);
   s.addNotes(
-    "이 6 단계가 모든 ML 프로젝트의 기초입니다. 각 단계를 뛰어넘으면 반드시 나중에 문제가 생깁니다. " +
-    "다음 슬라이드부터 각 단계를 하나씩 자세히 설명드리겠습니다."
+    "모든 ML 프로젝트는 결국 여섯 단계를 거칩니다. " +
+    "Clean 으로 결측과 이상, 중복을 제거하고, Missing 으로 NaN 을 세 가지 전략으로 처리합니다. " +
+    "그다음 Feature Engineering 으로 원본 값을 분해하고, Rotation Features 에서 도메인 지식을 주입해 R² 를 335 퍼센트 끌어올렸습니다. " +
+    "Split 에서 TimeSeriesSplit 으로 시간순 분할을 하고, 마지막 Iceberg 에서 Bronze, Silver, Gold 계층에 저장합니다. " +
+    "왼쪽의 오백칠십만 행 raw 데이터가 오른쪽의 40만, 5만, 5만 행 model-ready 학습 세트로 변환되는 것이 이 여섯 단계 안에서 일어납니다."
   );
 }
 
@@ -1068,8 +1092,12 @@ function koEnText(slide, x, y, w, h, ko, en, opts = {}) {
 
   addFooter(s, 13);
   s.addNotes(
-    "진짜 원본 데이터는 이렇게 지저분합니다. 'null', '-9999', 음수 거리 같은 sentinel 값, 중복 레코드 등. " +
-    "이걸 모르고 바로 모델 학습 시키면 쓰레기 입력 → 쓰레기 출력 (GIGO) 이 됩니다."
+    "진짜 원본 데이터가 얼마나 지저분한지 보여드립니다. " +
+    "똑같은 레코드가 두 번 등장하는 중복이 있고, AIRLINE 필드가 비어 있고 DEP_DELAY 가 null 인 결측이 있으며, " +
+    "DEP_DELAY 값이 마이너스 구천구백구십구인 경우는 실제 지연이 아니라 센서 오류 마커인 sentinel value 입니다. " +
+    "DISTANCE 가 마이너스 일인 경우는 거리가 음수일 수 없으니 범위 오류로 처리해야 합니다. " +
+    "중복은 drop_duplicates 로 제거하고, 결측은 세 전략으로 처리하며, sentinel 은 NaN 으로 치환하고, 범위는 필터로 잡아냅니다. " +
+    "이 과정을 건너뛰고 바로 모델에 넣으면 GIGO, 즉 쓰레기를 넣으면 쓰레기가 나오는 현상이 발생합니다."
   );
 }
 
@@ -1153,12 +1181,12 @@ function koEnText(slide, x, y, w, h, ko, en, opts = {}) {
     });
   });
 
-  // 우리가 선택한 것
+  // 제가 선택한 것
   s.addShape(pres.shapes.ROUNDED_RECTANGLE, {
     x: 0.5, y: 5.1, w: 8.9, h: 0, fill: { color: C.navy }, line: { color: C.navy, width: 0 },
   });
   s.addText([
-    { text: "💡 우리 프로젝트: ", options: { bold: true, color: C.amber, fontSize: 11 } },
+    { text: "💡 제 프로젝트: ", options: { bold: true, color: C.amber, fontSize: 11 } },
     { text: "전처리 파이프라인에 SimpleImputer 를 넣고, 최종 모델은 XGBoost 라 native handling 도 동시에 작동", options: { color: C.white, fontSize: 10 } },
   ], {
     x: 0.5, y: 4.68, w: 8.9, h: 0.35, fill: { color: C.navy }, fontFace: FONT_B, margin: 0,
@@ -1167,9 +1195,11 @@ function koEnText(slide, x, y, w, h, ko, en, opts = {}) {
 
   addFooter(s, 14);
   s.addNotes(
-    "XGBoost 가 인기 있는 이유 중 하나가 이겁니다 — 결측값을 그냥 받아줍니다. " +
-    "다른 모델 (logistic regression, kNN 등) 은 NaN 이 있으면 아예 학습이 안 됩니다. " +
-    "실무에서 이 편의성은 엄청난 시간 절약입니다."
+    "결측값을 처리하는 방법에는 세 가지 전략이 있습니다. " +
+    "첫 번째 Drop 은 그냥 버리는 방식이고, 두 번째 Impute 는 평균이나 중간값으로 채우는 방식이며, " +
+    "세 번째 XGBoost Native 는 결측값을 분할 방향 자체로 학습하는 방식입니다. " +
+    "XGBoost 가 인기 있는 이유가 여기 있습니다. 로지스틱 회귀나 kNN 같은 다른 모델은 NaN 이 하나라도 있으면 아예 학습조차 안 됩니다. " +
+    "저는 sklearn Pipeline 에 SimpleImputer 를 넣고 최종 estimator 로 XGBoost 를 두는 이중 안전망 구조를 쓰고 있습니다."
   );
 }
 
@@ -1270,9 +1300,11 @@ function koEnText(slide, x, y, w, h, ko, en, opts = {}) {
 
   addFooter(s, 15);
   s.addNotes(
-    "가장 기본적인 feature engineering: 시간 분해. " +
-    "모델은 '2026-04-19 14:30' 이라는 문자열을 아예 읽지 못합니다. " +
-    "hour=14, month=4, is_weekend=1 처럼 숫자로 나눠줘야 XGBoost 가 패턴을 찾습니다."
+    "모델은 문자열을 읽지 못하고 오직 숫자만 이해할 수 있습니다. " +
+    "2026-04-19 14:30:00 같은 datetime 문자열을 그대로 넣으면 모델이 아무 정보도 얻지 못합니다. " +
+    "hour 14, minute 30, dayofweek 6, month 4, dayofyear 109, is_weekend 1 처럼 여섯 개의 숫자 피처로 분해해야 모델이 주중과 주말의 차이, 월별 패턴, 시간대 패턴을 각각 독립적으로 볼 수 있습니다. " +
+    "평일 18 시 혼잡도와 토요일 18 시 혼잡도가 다르고, 7 월과 8 월은 지연이 많으며, 오전 6 시는 정시인 반면 저녁 18 시는 지연이 누적됩니다. " +
+    "이것이 Feature Engineering 의 출발점입니다."
   );
 }
 
@@ -1378,8 +1410,13 @@ function koEnText(slide, x, y, w, h, ko, en, opts = {}) {
 
   addFooter(s, 16);
   s.addNotes(
-    "이 슬라이드가 이 발표에서 가장 중요한 교훈입니다. '모델을 더 크게' 가 아니라 '도메인 지식을 feature 로' 가 정답이었다는 것. " +
-    "같은 XGBoost 에 피처 5 개만 더했을 뿐인데 Test R² 가 0.10 에서 0.43 으로 3.35 배 올랐습니다."
+    "이 슬라이드는 이번 발표에서 가장 중요한 슬라이드입니다. " +
+    "Test R² 가 0.10 에서 0.43 으로 335 퍼센트 상승했는데, 같은 XGBoost 모델에 피처 다섯 개만 추가했을 뿐입니다. " +
+    "핵심 아이디어는 같은 비행기가 하루에 세 번에서 다섯 번 뜨는데, 지연이 눈덩이처럼 누적된다는 점이었습니다. " +
+    "예를 들어 HL8281 편은 06 시에는 2 분 지연, 09 시 5 분, 12 시 12 분, 15 시 24 분, 18 시에는 45 분까지 쌓입니다. " +
+    "EUROCONTROL 연구에 따르면 전체 지연의 45 퍼센트가 이런 reactionary 딜레이입니다. " +
+    "rotation_depth, prev_leg_arr_delay_min, scheduled_turnaround_min, actual_turnaround_min, is_first_leg_of_day 다섯 개 피처만으로 R² 가 3.35 배가 됐습니다. " +
+    "교훈은 명확합니다. 모델을 키우는 것보다 도메인 지식을 피처로 만드는 것이 훨씬 효과적입니다."
   );
 }
 
@@ -1480,9 +1517,12 @@ function koEnText(slide, x, y, w, h, ko, en, opts = {}) {
 
   addFooter(s, 17);
   s.addNotes(
-    "초심자가 가장 많이 하는 실수입니다. sklearn 의 train_test_split 은 기본값이 shuffle=True 라서 " +
-    "시계열 데이터에 그대로 쓰면 미래 정보가 과거 학습에 새어들어가 성능이 인위적으로 좋아 보입니다. " +
-    "ADR-004 에 이걸 원칙으로 못박고 전체 파이프라인을 수정했습니다."
+    "두 번째로 중요한 교훈이자 초심자가 가장 많이 범하는 치명적인 실수입니다. " +
+    "sklearn 의 train_test_split 은 기본값이 shuffle True 라서 시간 축을 무시하고 무작위로 섞어 나눕니다. " +
+    "그러면 미래가 과거 훈련에 섞여 들어가는 temporal leakage 가 발생하고, CV 표준편차가 플러스마이너스 0.30 으로 비정상적으로 작아 보이는 낙관적 편향이 생깁니다. " +
+    "TimeSeriesSplit 의 walk-forward 방식을 쓰면 과거로만 학습하고 미래로만 평가하게 됩니다. " +
+    "CV 표준편차가 플러스마이너스 6.14 로 20 배 증가하지만, 이것이 정직한 수치이고 시간대별 성능 변동성을 드러냅니다. " +
+    "저는 이 원칙을 ADR-004 에 명시하고 파이프라인 전체를 수정했습니다. 여러분 코드에 shuffle True 가 시계열 데이터에 쓰이고 있다면 지금 당장 고치시기 바랍니다."
   );
 }
 
@@ -1562,8 +1602,12 @@ function koEnText(slide, x, y, w, h, ko, en, opts = {}) {
 
   addFooter(s, 18);
   s.addNotes(
-    "Bronze 가 있어서 원본을 재해석할 수 있고, Silver 가 있어서 여러 모델이 같은 feature 를 공유하고, " +
-    "Gold 는 모델 소비 + 감사 추적용입니다. 사고 분석 시 '어느 레이어에서 틀어졌나' 를 layer-by-layer 로 추적 가능합니다."
+    "전처리의 마지막 단계는 저장인데, 그냥 CSV 에 저장하면 안 됩니다. " +
+    "Apache Iceberg 의 Medallion 아키텍처를 Bronze, Silver, Gold 세 계층으로 나눠 쓰고 있습니다. " +
+    "Bronze 는 원본 그대로 저장해서 재처리 기준점이 되고, Silver 는 정제와 조인이 끝난 flight_features 같은 통합 테이블이며, " +
+    "Gold 는 모델이 직접 소비하는 inference_log 나 anomaly_decisions 같은 감사용 테이블입니다. " +
+    "세 계층을 쓰는 이유는 ACID 트랜잭션으로 일관성을 유지하고, 스키마 진화를 지원하며, " +
+    "Time travel 로 '3 일 전 테이블 상태가 어땠지' 같은 사고 조사용 쿼리가 가능하기 때문입니다."
   );
 }
 
@@ -1622,19 +1666,20 @@ function koEnText(slide, x, y, w, h, ko, en, opts = {}) {
 
   addFooter(s, 19);
   s.addNotes(
-    "같은 데이터 셋으로 만들 수 있는 프로젝트가 8 가지 이상 있습니다. " +
-    "우리는 이 중 2 개 — 지연 예측과 이상 탐지 — 를 선택했습니다. 왜? " +
-    "둘 다 관제사의 실제 의사결정에 직접 기여하기 때문입니다."
+    "같은 데이터 셋으로 만들 수 있는 프로젝트가 최소 여덟 가지입니다. " +
+    "지연 예측, 항공권 가격 예측, 공항 혼잡도 예측, 연료 소비 최적화, 운항 경로 최적화, 기상 영향 분석, 이상 탐지, 승객 수요 예측이 모두 가능합니다. " +
+    "같은 데이터이지만 다른 질문, 다른 프로젝트가 만들어집니다. 여러분이 선택한 질문이 곧 여러분 프로젝트의 정체성을 결정합니다. " +
+    "저는 이 여덟 가지 중에서 지연 예측과 이상 탐지 두 가지를 선택했습니다. 둘 다 관제사의 실시간 의사결정에 직접 기여하기 때문입니다."
   );
 }
 
 // ─────────────────────────────────────────────────────────────────
-// 슬라이드 20 · 우리가 만든 것
+// 슬라이드 20 · 제가 만든 것
 // ─────────────────────────────────────────────────────────────────
 {
   const s = pres.addSlide();
   s.background = { color: C.cream };
-  addHeader(s, "CHAPTER 06 · OUR PROJECT", "우리가 만든 것", "What WE built — three integrated features");
+  addHeader(s, "CHAPTER 06 · OUR PROJECT", "제가 만든 것", "3 integrated features on one pipeline");
 
   const ours = [
     {
@@ -1700,8 +1745,11 @@ function koEnText(slide, x, y, w, h, ko, en, opts = {}) {
 
   addFooter(s, 20);
   s.addNotes(
-    "우리가 만든 3 가지 기능. 각각 다른 데이터를 쓰는 것 같지만 공통 파이프라인에서 흘러나옵니다. " +
-    "지연 예측은 Gold silver_flight_features, 이상 탐지는 Silver aircraft_phase, RAG 는 ChromaDB 161 chunks."
+    "제가 직접 만든 세 가지 기능을 한 슬라이드에 모았습니다. " +
+    "첫 번째는 지연 예측과 신뢰구간으로, XGBoost Test R² 0.43 에 Conformal 이 90 퍼센트 커버리지를 보장하며, 관제사는 '90 퍼센트 확률로 6 분에서 41 분 사이' 같은 정량적 정보를 받습니다. " +
+    "두 번째는 비행 단계별 이상 탐지로, Isolation Forest 일곱 개를 운영해 alert fatigue 를 67 퍼센트 줄였습니다. " +
+    "세 번째는 AI 관제 어시스턴트로, Qwen2.5-7B 를 QLoRA 와 DPO 로 직접 파인튜닝한 한국어 LLM 이고 RAG 로 161 개 chunks 규정집을 참조해 5 초 이내에 출처 포함 답변을 생성합니다. " +
+    "세 기능이 독립적으로 보이지만 모두 같은 Iceberg 기반 데이터 파이프라인 위에 올라가 있습니다."
   );
 }
 
@@ -1749,8 +1797,12 @@ function koEnText(slide, x, y, w, h, ko, en, opts = {}) {
 
   addFooter(s, 21);
   s.addNotes(
-    "XGBoost 는 2014 년 Tianqi Chen 이 발표한 이후 Kaggle 우승 모델의 사실상 표준입니다. " +
-    "4 가지 이유 중 가장 실무에서 중요한 것은 3 번 '해석성' — 관제사에게 '왜 이 예측인가' 를 SHAP 으로 설명할 수 있기 때문입니다."
+    "지연 예측 모델로 XGBoost 를 선택한 이유가 네 가지 있습니다. " +
+    "첫째는 정확도로 tabular 데이터에서는 딥러닝과 동등하거나 더 낫고, 피처가 30 개 이하인 tabular 는 XGBoost 의 홈그라운드입니다. " +
+    "둘째는 속도로 오백칠십만 행을 CPU 만으로 4 분 안에 학습할 수 있어 GPU 가 필요 없습니다. " +
+    "셋째는 해석성으로 SHAP TreeExplainer 를 쓰면 피처별 기여도를 시각화해서 관제사에게 근거를 제시할 수 있고, " +
+    "넷째는 robustness 로 결측값을 자동 처리하고 이상치에 강하며 normalization 이 필요 없습니다. " +
+    "실무에서 가장 중요한 것은 세 번째 해석성입니다. 딥러닝 블랙박스로는 관제사의 '왜?' 에 납득할 만한 답을 줄 수 없습니다."
   );
 }
 
@@ -1829,9 +1881,11 @@ function koEnText(slide, x, y, w, h, ko, en, opts = {}) {
 
   addFooter(s, 22);
   s.addNotes(
-    "Gradient Boosting 의 핵심 비유: 시험 공부할 때 '틀린 문제만 다시 보는 것' 과 같습니다. " +
-    "첫 모델이 틀린 부분을 다음 모델이 집중 학습 → 그 다음 모델이 또 남은 오차를 학습 → 계속 개선. " +
-    "200 개 트리의 합으로 강력한 앙상블이 됩니다."
+    "XGBoost 는 여러 개의 약한 모델을 순차적으로 만들되, 이전 모델의 오차에만 집중해서 학습합니다. " +
+    "Tree 1 은 오차가 플러스마이너스 15 분 정도로 엉성하지만, Tree 2 가 남은 잔차에 집중해 플러스마이너스 8 분으로 줄이고, Tree 3 이 또 남은 오차에 집중해 플러스마이너스 3 분까지 내려옵니다. " +
+    "이렇게 200 번까지 반복하면 최종 오차는 플러스마이너스 0.5 분 수준이 되고, 최종 예측은 Tree 1 부터 Tree 200 까지의 합이 됩니다. " +
+    "시험 공부할 때 틀린 문제만 다시 보는 것과 같은 원리입니다. 70 퍼센트 맞추면 틀린 30 퍼센트만 집중하고, 그중 또 틀린 것만 집중하는 방식입니다. " +
+    "이것이 gradient boosting 이라는 이름의 의미이고, 매 단계 손실 함수의 기울기를 따라 최적으로 수정해 나갑니다."
   );
 }
 
@@ -1906,9 +1960,12 @@ function koEnText(slide, x, y, w, h, ko, en, opts = {}) {
 
   addFooter(s, 23);
   s.addNotes(
-    "세 개의 bar 가 모두 0.10 이고 마지막 두 개가 0.43 으로 뛰는 걸 보여주는 이유는 — " +
-    "TimeSeriesSplit (P0) 자체로는 수치가 안 올라갔다는 걸 보여주기 위해서입니다. " +
-    "진짜 향상은 P1 의 Rotation features 5 개가 만들었습니다."
+    "실제 제 프로젝트의 결과를 Sprint 별 Test R² 추이로 보여드립니다. " +
+    "기본 XGBoost baseline 은 R² 0.10, TimeSeriesSplit 을 적용한 P0 도 R² 0.10 으로 수치는 그대로지만 정직해졌습니다. " +
+    "Rotation features 를 추가한 P1 에서 R² 가 0.43 으로 뛰었고, Conformal interval 을 붙인 P1+ 도 R² 0.43 을 유지하면서 예측 구간이 추가됐습니다. " +
+    "P0 에서 수치가 안 올라간 이유는 TimeSeriesSplit 이 더 좋은 모델을 만드는 게 아니라 더 정직한 평가를 해주는 기법이기 때문입니다. " +
+    "진짜 향상은 P1 의 Rotation features 가 만들어냈습니다. " +
+    "최종 지표는 Test RMSE 22.61 분, Test R² 0.43, Conformal coverage 정확히 90.00 퍼센트, p95 응답 시간 42 밀리세컨드입니다."
   );
 }
 
@@ -1981,8 +2038,12 @@ function koEnText(slide, x, y, w, h, ko, en, opts = {}) {
 
   addFooter(s, 24);
   s.addNotes(
-    "항공 사고는 희귀해서 '정상 vs 사고' 라벨이 거의 없습니다. 이 상황에서 Autoencoder 를 쓰면 GPU 필요 + 학습 불안정. " +
-    "Isolation Forest 는 이 두 문제를 모두 해결합니다 — 라벨 불필요 + CPU 분 단위 학습 + 해석 가능."
+    "두 번째 모델은 이상 탐지용 Isolation Forest 입니다. " +
+    "핵심 아이디어는 이상치가 소수이고 정상과 거리가 멀기 때문에 무작위 분할로 빨리 고립된다는 점입니다. " +
+    "정상점은 트리에서 깊이 내려가야 고립되어 path length 가 8 스플리츠 이상 필요한 반면, 이상점은 단 2 번에서 3 번의 분할로 곧바로 고립됩니다. " +
+    "즉 path length 자체가 anomaly score 가 됩니다. 짧으면 이상, 길면 정상이라 매우 직관적입니다. " +
+    "Isolation Forest 를 선택한 이유는 항공 사고가 희귀해 라벨이 없기에 지도학습이 불가능하고, 빅오 엔 로그 엔 속도로 매우 빠르며, 해석이 직관적이기 때문입니다. " +
+    "Autoencoder 를 선택했다면 GPU 필요, 학습 불안정, 블랙박스 세 문제가 모두 생겼을 겁니다."
   );
 }
 
@@ -2069,8 +2130,11 @@ function koEnText(slide, x, y, w, h, ko, en, opts = {}) {
 
   addFooter(s, 25);
   s.addNotes(
-    "단계별 모델은 7 배의 운영 비용이 들지만, alert fatigue 67% 감소라는 구체적 성과로 정당화됩니다. " +
-    "각 phase 마다 contamination (이상 예상률) 을 도메인 지식으로 튜닝했습니다 — TAXI 는 조용한 구간이라 0.02, LANDING 은 사고 빈발 구간이라 0.06."
+    "Isolation Forest 를 하나가 아니라 일곱 개 만든 이유는, 단일 모델이 비행 단계별 차이를 구분하지 못하기 때문입니다. " +
+    "CRUISE 중 3만 피트는 정상이지만 LANDING 중 3만 피트는 완전 비정상인데, 단일 모델은 이 둘을 구분 못하고 false positive 가 폭주하며 alert fatigue 를 유발합니다. " +
+    "해결책으로 일곱 개의 비행 단계마다 별도 Isolation Forest 를 두고 contamination 을 개별 튜닝했습니다. " +
+    "TAXI 는 조용한 구간이라 0.02, TAKEOFF 0.03, CLIMB 0.04, CRUISE 0.05, DESCENT 0.04, APPROACH 와 LANDING 은 사고 빈발 구간이라 0.06 까지, TAXI 의 2 퍼센트부터 LANDING 의 6 퍼센트까지 3 배 차이로 튜닝했습니다. " +
+    "결과적으로 False Positive 가 67 퍼센트 감소하며 alert fatigue 가 대폭 완화됐고, v2.1.10 과 ADR-006 에서 서빙에도 wire-up 이 완료됐습니다."
   );
 }
 
@@ -2154,8 +2218,12 @@ function koEnText(slide, x, y, w, h, ko, en, opts = {}) {
 
   addFooter(s, 26);
   s.addNotes(
-    "Conformal Prediction 은 수학적으로 '90% 확률로 이 구간에 실제 값이 있다' 를 보장합니다. " +
-    "분포 가정 없음 (distribution-free). MAPIE 라이브러리로 구현. 실측 coverage 가 정확히 90.00% 나온 것이 증거."
+    "마지막 핵심 기법은 점 예측과 구간 예측의 차이입니다. " +
+    "'15 분 지연' 이라는 점 예측은 얼마나 믿어야 할지 알 수 없고, 실제로는 5 분일 수도 40 분일 수도 있습니다. " +
+    "관제사가 이 숫자만 보고 승객 안내를 어떻게 하겠습니까. 근거 없는 high, medium, low confidence 분류로는 부족합니다. " +
+    "Conformal 을 적용한 후에는 '90 퍼센트 확률로 6 분에서 41 분 사이의 지연' 이라는 수학적으로 보장된 구간을 얻을 수 있고, 그것도 분포 가정 없이 보장됩니다. " +
+    "MAPIE 라이브러리로 구현했고 실측 coverage 가 정확히 90.00 퍼센트로 나온 것이 증거입니다. " +
+    "이제 관제사는 최악의 경우 41 분까지 지연 가능하니 승객 안내를 준비하자는 정량적 의사결정을 할 수 있습니다."
   );
 }
 
@@ -2211,8 +2279,11 @@ function koEnText(slide, x, y, w, h, ko, en, opts = {}) {
 
   addFooter(s, 27);
   s.addNotes(
-    "처음 ADS-B 전파부터 관제사 화면에 알림이 뜨기까지 전체 7 단계, p95 5 초 이내에 끝납니다. " +
-    "각 단계의 지연: Kafka 100ms, Iceberg 조회 500ms, XGBoost 42ms, Conformal 100ms, LLM 2-3s, 나머지 network."
+    "모든 조각을 하나로 연결해 보겠습니다. 비행기가 공중에 떠 있는 순간부터 관제사 화면에 알림이 뜨는 순간까지 일곱 단계가 5 초 이내에 흐릅니다. " +
+    "ADS-B 수신에서 비행기 위치가 OpenSky 로 오고, Kafka 의 flight-position 토픽에 Avro 메시지가 쌓입니다. " +
+    "Iceberg Silver 의 flight_features 에서 조인하고, XGBoost 가 42 밀리세컨드 안에 '지연 20 분' 을 예측합니다. " +
+    "Conformal 이 '90 퍼센트 확률로 12 분에서 40 분' 구간을 계산하고, RAG 와 LLM 이 FAA AIM 7-1 에 따른 출처 기반 조언을 생성해서 관제사 대시보드에 표시합니다. " +
+    "Kafka 약 100 밀리세컨드, Iceberg 500 밀리세컨드, XGBoost 42 밀리세컨드, Conformal 100 밀리세컨드, LLM 2 초에서 3 초가 걸리고, LLM 이 가장 느린 병목입니다."
   );
 }
 
@@ -2258,8 +2329,13 @@ function koEnText(slide, x, y, w, h, ko, en, opts = {}) {
 
   addFooter(s, 28);
   s.addNotes(
-    "이 5 가지가 여러분이 이 발표에서 가져가야 할 전부입니다. " +
-    "특히 2 번과 3 번은 실무에서 가장 많이 실수하는 부분이고, 우리 프로젝트의 P0/P1 sprint 가 그 증거입니다."
+    "이 발표에서 여러분이 가져가셨으면 하는 다섯 가지 교훈입니다. " +
+    "첫 번째, 데이터는 raw 단계에서 절대 완벽하지 않으니 cleaning 을 건너뛰지 마십시오. " +
+    "두 번째, Feature Engineering 이 모델 크기보다 중요합니다. 제 프로젝트의 P1 에서 피처 다섯 개만 추가해 R² 가 335 퍼센트 개선됐습니다. " +
+    "세 번째, 시계열 데이터는 절대 shuffle 하지 마십시오. temporal leakage 는 가장 흔하면서도 가장 치명적인 실수입니다. " +
+    "네 번째, 모델 선택을 정확도만으로 하지 말고 해석성과 운영성, 유지 비용을 모두 고려하십시오. " +
+    "다섯 번째, 도메인 지식이 곧 경쟁력입니다. EUROCONTROL 의 '지연 45 퍼센트는 reactionary 다' 라는 연구 한 줄이 Rotation features 설계의 씨앗이 됐습니다. " +
+    "특히 두 번째와 세 번째가 초심자가 가장 많이 실패하는 지점입니다."
   );
 }
 
@@ -2308,12 +2384,12 @@ function koEnText(slide, x, y, w, h, ko, en, opts = {}) {
 
   addFooter(s, 29);
   s.addNotes(
-    "예상 질문 5 개. 답변 요약: " +
-    "① Iceberg = ACID + schema evolution + time-travel. plain parquet 에는 없음. " +
-    "② Bayesian 은 prior 가정 필요, Conformal 은 분포 가정 없음. " +
-    "③ 단일 모델은 contamination 을 균일하게 써야 해서 phase 별 3배 차이를 반영 못함. " +
-    "④ 10% sampling 은 chronological 하게 뽑아서 시간 편향 없게 했음. " +
-    "⑤ 161 chunks 는 RAGAs 평가에서 faithfulness 0.91 · context_precision 0.85 로 충분 검증됨."
+    "예상 질문 다섯 개에 대한 답변을 준비해 왔습니다. " +
+    "첫째, Iceberg 가 plain parquet 보다 나은 이유는 catalog, ACID 트랜잭션, 스키마 진화, time-travel 이 모두 포함된 테이블 포맷이기 때문입니다. " +
+    "둘째, Bayesian 은 prior 가정이 필요하지만 Conformal 은 분포 가정 자체가 없어서 데이터가 가정을 어겨도 구간이 깨지지 않습니다. " +
+    "셋째, 단일 모델은 contamination 을 모든 phase 에 동일하게 적용해야 해서 TAXI 2 퍼센트와 LANDING 6 퍼센트처럼 3 배 차이가 나는 phase 별 특성을 전혀 반영할 수 없습니다. " +
+    "넷째, 10 퍼센트 샘플링은 chronological 하게 뽑아서 시간 편향이 없게 했고, 오십만 행이면 통계적으로 충분합니다. " +
+    "다섯째, 161 chunks 는 RAGAs 평가에서 faithfulness 0.91, context_precision 0.85 로 검증됐고 국내선 관제에는 충분합니다."
   );
 }
 
@@ -2374,7 +2450,11 @@ function koEnText(slide, x, y, w, h, ko, en, opts = {}) {
   });
 
   s.addNotes(
-    "질문 받겠습니다. 감사합니다.\n\nThank you. Questions?"
+    "오늘 발표의 핵심 세 가지를 다시 정리드립니다. " +
+    "첫째, 데이터는 전처리가 핵심이니 여섯 단계 파이프라인을 기억해 주시기 바랍니다. " +
+    "둘째, Feature Engineering 이 모델보다 강력하며 335 퍼센트 개선 사례가 그 증거입니다. " +
+    "셋째, 시계열 데이터는 절대 shuffle 하지 마시고, ADR-004 의 원칙을 참고해 주세요. " +
+    "질문이 더 있으시면 발표 후에도 편하게 말씀해 주세요. 감사합니다."
   );
 }
 
