@@ -1,808 +1,407 @@
 # SkyOps Intelligence (스카이옵스 인텔리전스) — 데이터 교육용 발표 대본
-# Aviation Data Story — Educational Speaker Script
 
-> **발표 시간 / Duration**: 25~30 분 · 30 슬라이드 · 슬라이드당 평균 50~60 초
-> **청중 / Audience**: 빅데이터과 한국인 학생 + 교환학생 (Korean + international students, mixed background)
-> **언어 정책 / Language policy**: 한국어 메인, 영어 핵심 용어를 괄호로 병기 · Korean main with English technical terms in parentheses
-> **톤 / Tone**: 교육적 · 단계적 · 예시 중심 · educational, step-by-step, example-driven
-
----
-
-## 📌 발표자 가이드 / Presenter Guide
-
-- 각 슬라이드에 **한 번씩 "왜 이걸 썼는가"** 를 강조 · stress the "why" once per slide
-- 외국인 학생을 위해 **영어 핵심 용어** 를 처음 등장 시 한 번씩 또렷이 발음 · pronounce English terms clearly
-- 슬라이드 16 (Rotation (로테이션) +335%) 과 17 (TimeSeriesSplit (타임시리즈스플릿)) 은 **특히 천천히**, 학생들이 필기할 시간을 줌
-- Q&A (큐앤에이) 에 대비해 슬라이드 29 의 답변 요약을 미리 숙지
-- 괄호 안의 한글 발음은 **외국인 학생을 위해 처음 등장 시 한 번만** 읽어주고, 그 다음부터는 영어 그대로 발음
+> **발표 시간**: 25~30 (이십오에서 삼십) 분 · 30 (삼십) 슬라이드 · 슬라이드당 평균 50~60 (오십에서 육십) 초
+> **청중**: 빅데이터과 한국인 학생과 교환학생
+> **언어 정책**: 한국어 기반, 개발 용어에만 영어 발음을 괄호로 병기
+> **톤**: 교육적, 단계적, 예시 중심
 
 ---
 
-## 슬라이드 1 · 표지 / Cover (30 초)
+## 📌 발표자 가이드
 
-안녕하세요 (Hello). 빅데이터과 3학년 정재원입니다. 오늘은 저희 DoubleJ (더블제이) 팀이 만든 SkyOps Intelligence (스카이옵스 인텔리전스) 프로젝트의 **데이터 (data, 데이터)** 이야기를 해보려 합니다.
+각 슬라이드에서 "왜 이걸 썼는가" 를 한 번씩 짚어드리고, 외국인 학생을 위해 핵심 개발 용어는 처음 등장할 때 한 번씩 또렷이 발음하겠습니다. 슬라이드 16 의 Rotation (로테이션) 335% (삼백삼십오 퍼센트) 사례와 슬라이드 17 의 TimeSeriesSplit (타임시리즈스플릿) 부분은 특히 천천히 진행해서, 학생들이 필기할 시간을 충분히 드리겠습니다. Q&A (큐앤에이) 에 대비해 슬라이드 29 의 답변 요약을 미리 숙지해 두었고, 괄호 안의 한글 발음은 외국인 학생을 위해 처음 등장할 때 한 번만 읽어드리고 그 다음부터는 원어 그대로 발음하겠습니다.
 
-Today I'll focus on the **data side** of our SkyOps Intelligence project — how data is collected, transformed, and finally becomes a model.
+---
 
-앞으로 30 장 동안, 여러분은 다음 질문에 대한 답을 찾게 됩니다.
+## 슬라이드 1 · 표지 (30 (삼십) 초)
+
+안녕하세요. 빅데이터과 3 (삼) 학년 정재원입니다. 오늘은 제가 속한 DoubleJ (더블제이) 팀이 만든 SkyOps Intelligence (스카이옵스 인텔리전스) 프로젝트의 **데이터 (data, 데이터)** 이야기를 해보려 합니다.
+
+이 프로젝트에서 데이터가 어떻게 수집되고, 어떻게 가공되고, 최종적으로 모델이 되는지를 중심으로 설명드리겠습니다.
+
+앞으로 30 (삼십) 장 동안, 여러분은 다음 질문에 대한 답을 찾게 되실 겁니다.
 
 > "원본 데이터 한 줄이 어떻게 관제사 화면의 알림 하나가 되는가?"
 
-By the end of this talk, you'll understand how **one row of raw data becomes one alert on an air traffic controller's screen**.
+이 발표가 끝날 때쯤이면, 한 줄의 raw (로우) 데이터가 어떻게 관제사 화면 위의 알림 하나로 바뀌는지 전 과정을 이해하게 되실 겁니다.
 
 ---
 
-## 슬라이드 2 · 학습 목표 / Learning Objectives (30 초)
+## 슬라이드 2 · 학습 목표 (30 (삼십) 초)
 
-이 발표가 끝났을 때 여러분은 다음 5 가지를 알게 됩니다.
+이 발표가 끝났을 때, 여러분이 다섯 가지를 이해하시도록 구성했습니다.
 
-1. **항공 데이터가 어떻게 생성되는가** · How aviation data is generated
-2. **raw (로우) 데이터를 어떻게 정제하는가** · How to clean raw data
-3. **왜 시계열 분할이 중요한가** · Why time-ordered split matters (temporal leakage (템포럴 리키지))
-4. **Feature Engineering (피처 엔지니어링) 이 모델을 어떻게 바꾸는가** — 실제 사례 R² (알제곱) +335% · Real case, 3.35× improvement
-5. **XGBoost (엑스지부스트) / Isolation Forest (아이솔레이션 포레스트) 가 왜 선택됐는가** · Why these models, not others
+먼저 항공 데이터가 어떻게 생성되는지를 살펴보고, 이어서 raw (로우) 데이터를 어떻게 정제하는지, 그리고 왜 시계열 분할 (time-ordered split, 타임 오더드 스플릿) 이 중요한지와 temporal leakage (템포럴 리키지) 가 무엇인지를 다루겠습니다. 그다음으로 Feature Engineering (피처 엔지니어링) 이 모델을 어떻게 바꾸는지를 실제 사례, 즉 R² (알제곱) 이 335% (삼백삼십오 퍼센트) 개선된 이야기로 보여드리고, 마지막으로 XGBoost (엑스지부스트) 와 Isolation Forest (아이솔레이션 포레스트) 가 왜 선택됐는지 그 이유를 설명드립니다.
 
-특히 3 번과 4 번이 가장 중요합니다. 이 두 가지는 실제로 저희 프로젝트의 P0 (피제로), P1 (피원) 스프린트 (sprint) 에서 증명된 내용이라 숫자를 기억해 두세요.
-
-Points **3 and 4 are the most important** — they were proven in our P0 / P1 sprints with real numbers.
+특히 세 번째와 네 번째가 가장 중요합니다. 이 두 가지는 실제로 제가 진행한 프로젝트의 P0 (피제로), P1 (피원) 스프린트 (sprint, 스프린트) 에서 숫자로 증명된 내용이라, 숫자 자체를 꼭 기억해 두시면 좋겠습니다.
 
 ---
 
-## 슬라이드 3 · 데이터란 무엇인가? / What is Data? (50 초)
+## 슬라이드 3 · 데이터란 무엇인가? (50 (오십) 초)
 
-잠깐 기본으로 돌아가겠습니다. 데이터 (data) 란 무엇일까요?
+잠깐 기본으로 돌아가 보겠습니다. 데이터란 무엇일까요? 한마디로 말씀드리면, 데이터는 세상의 측정값입니다.
 
-Let's step back to basics. What IS data?
+슬라이드를 보시면 의료와 항공, 두 가지 예시를 준비했습니다. 의료에서는 체온계가 37.5 (삼십칠 점 오) 도라는 숫자를 만들고, 이 숫자가 EHR (이에이치알) 데이터베이스 (database, 데이터베이스) 에 저장되어 최종적으로 진단 모델로 흘러갑니다. 항공에서는 레이더 수신기가 위도와 경도를 측정해서, 이 값이 Kafka (카프카) 스트림 (stream, 스트림) 을 거쳐 지연 예측 모델로 들어갑니다.
 
-**데이터는 세상의 측정값입니다 (Data = quantified observations of the world).**
-
-슬라이드를 보시면 의료와 항공 두 예시가 있습니다.
-
-의료에서는: 체온계 (thermometer, 써모미터) → 37.5°C → EHR (이에이치알) 데이터베이스 (database, 데이터베이스) → 진단 모델 (diagnosis model, 다이어그노시스 모델)
-In medicine: thermometer → 37.5°C → EHR DB → diagnostic model
-
-항공에서는: 레이더 수신기 (radar receiver, 레이더 리시버) → 위도·경도 (lat/lon, 랏/론) → Kafka (카프카) 스트림 (stream, 스트림) → 지연 예측 (delay prediction, 딜레이 프리딕션)
-In aviation: radar receiver → lat/lon → Kafka stream → delay prediction
-
-**이 4 단계 구조 — 센서 (sensor, 센서), 숫자 (numeric, 뉴메릭), 저장 (storage, 스토리지), 모델 (model, 모델) — 는 어떤 도메인 (domain, 도메인) 이든 동일합니다**. 이걸 머릿속에 두면 나머지 슬라이드 (slide, 슬라이드) 가 전부 이 프레임 (frame, 프레임) 에 맞아 들어갑니다.
-
-These **4 steps — sensor, numeric, storage, model — are universal**. Keep this frame in your head; every slide from now on fits into it.
+이 네 단계 구조, 즉 센서 (sensor, 센서) 가 숫자를 만들고, 그 숫자가 저장소 (storage, 스토리지) 에 쌓인 뒤 모델 (model, 모델) 로 흘러가는 구조는 어떤 도메인 (domain, 도메인) 에서도 똑같이 반복됩니다. 이 프레임을 머릿속에 두시면, 앞으로 나올 모든 슬라이드가 이 구조 안에 정확히 들어맞게 됩니다.
 
 ---
 
-## 슬라이드 4 · 항공 데이터의 특성 / Aviation Data Characteristics (45 초)
+## 슬라이드 4 · 항공 데이터의 특성 (45 (사십오) 초)
 
-항공 데이터는 4 가지 특별한 성질이 있습니다.
+항공 데이터에는 네 가지 특별한 성질이 있습니다.
 
-Aviation data has four special characteristics.
+첫째는 **실시간 (real-time, 리얼타임)** 성질입니다. 초 단위로 업데이트되기 때문에 1 (일) 분의 지연도 큰 의미를 갖습니다. 둘째는 **고빈도 (high frequency, 하이 프리퀀시)** 성질로, 초당 수천 건이 쏟아져 들어옵니다. 셋째는 **시계열 (time-series, 타임시리즈)** 성질인데, 순서가 매우 중요해서 10 (열) 시 데이터가 먼저이고 10 (열) 시 1 (일) 분 데이터가 나중이어야 하며, 절대로 이 순서를 섞으면 안 됩니다. 마지막으로 넷째는 **다중 소스 (multi-source, 멀티 소스)** 성질로, 레이더와 기상, 관제 메시지가 모두 합쳐져야 비로소 의미가 생깁니다.
 
-1. **실시간 (Real-time, 리얼타임)** — 초 단위로 업데이트 (update, 업데이트) 됩니다. 1 분 지연도 큰 의미가 있습니다.
-2. **고빈도 (High frequency, 하이 프리퀀시)** — 초당 수천 건이 들어옵니다.
-3. **시계열 (Time-series, 타임시리즈)** — 순서 (order, 오더) 가 중요합니다. 10:00 먼저, 10:01 나중. 섞으면 안 됩니다.
-4. **다중 소스 (Multi-source, 멀티 소스)** — 레이더 + 기상 + 관제 메시지 (message, 메시지) 가 다 합쳐져야 의미가 생깁니다.
-
-**이 4 가지가 '아무 데이터나 아무 방식으로 쓰면 안 되는' 이유입니다.**
-
-These four properties explain why you can't just throw aviation data into any ML pipeline:
-- 실시간 + 고빈도 → Kafka (카프카) 가 필요 (we need Kafka)
-- 시계열 → **절대 shuffle (셔플) 하지 마세요** (never shuffle — slide 17)
-- 다중 소스 → Schema Registry (스키마 레지스트리) 가 필요 (we need a contract — slide 11)
+이 네 가지 성질이 바로, 아무 데이터나 아무 방식으로 쓰면 안 되는 이유입니다. 실시간과 고빈도 때문에 Kafka (카프카) 가 필요하고, 시계열이기 때문에 절대 shuffle (셔플) 을 하면 안 되며, 다중 소스이기 때문에 Schema Registry (스키마 레지스트리) 라는 계약이 필요합니다. 이 세 가지는 각각 슬라이드 11 (십일), 17 (십칠) 에서 다시 설명드리겠습니다.
 
 ---
 
-## 슬라이드 5 · 4개 데이터 소스 개요 / Four Data Sources (60 초)
+## 슬라이드 5 · 4 (네) 개 데이터 소스 개요 (60 (육십) 초)
 
-저희는 총 4 가지 데이터 소스 (source, 소스) 를 씁니다.
+저는 이 프로젝트에서 총 네 가지 데이터 소스 (source, 소스) 를 사용하고 있습니다.
 
-We use four data sources in total.
+첫 번째는 **OpenSky Network (오픈스카이 네트워크)** 입니다. 전 세계 35,000 (삼만 오천) 개 지상 수신기가 기여하는 공개 ADS-B (에이디에스-비) 네트워크 (network, 네트워크) 이고, 10 (십) 초마다 항공기 위치가 업데이트됩니다. 두 번째는 **NOAA (노아) 와 KMA (케이엠에이) 의 METAR (메타) 데이터** 인데, 공항 기상 보고서이고 30 (삼십) 분 주기로 갱신됩니다. 세 번째가 **FAA SWIM (에프에이에이 스윔)** 으로, 별표가 붙은 이유는 잠시 후에 말씀드리겠습니다. 미 연방항공청의 공식 System Wide Information Management (시스템 와이드 인포메이션 매니지먼트) 데이터입니다. 네 번째는 **Kaggle (캐글) 의 flights.csv (플라이츠 닷 씨에스브이)** 로, US DOT (유에스 디오티) 산하 Bureau of Transportation Statistics (뷰로 오브 트랜스포테이션 스태티스틱스) 의 2015 (이천십오) 년 배치 (batch, 배치) 데이터이며 5.7M (파이브 포인트 세븐 밀리언), 즉 오백칠십만 행 규모입니다.
 
-1. **OpenSky Network (오픈스카이 네트워크)** — 전 세계 35,000 개 지상 수신기 (ground receiver, 그라운드 리시버) 가 기여하는 공개 ADS-B (에이디에스-비) 네트워크 (network, 네트워크). 10 초마다 항공기 위치.
-   *35,000 ground receivers worldwide, crowdsourced ADS-B, 10-second polling.*
-2. **NOAA (노아) + KMA (케이엠에이) METAR (메타)** — 공항 기상 보고서. 30 분 주기.
-   *Airport weather reports, 30-min update.*
-3. **FAA SWIM (에프에이에이 스윔) ★** — 미 연방항공청 공식 System Wide Information Management (시스템 와이드 인포메이션 매니지먼트). 이 별표가 붙은 이유는 잠시 후에.
-   *US FAA production data stream, will explain the star shortly.*
-4. **Kaggle (캐글) flights.csv (플라이츠 닷 씨에스브이)** — US DOT (유에스 디오티) Bureau of Transportation Statistics (뷰로 오브 트랜스포테이션 스태티스틱스) 의 2015 년 배치 (batch, 배치) 데이터. 5.7 M (파이브포인트세븐 밀리언) 행.
-   *US DOT BTS 2015 batch dataset, 5.7M rows.*
-
-별표가 붙은 SWIM (스윔) 이 **이 프로젝트의 플래그십 (flagship, 플래그십) 성과**입니다. 왜 그런지 슬라이드 8 에서 자세히 보여드립니다.
-
-The starred SWIM source is **our flagship achievement** — I'll show you why at slide 8.
+별표가 붙은 SWIM (스윔) 은 제가 이 프로젝트에서 가장 자랑스럽게 생각하는 플래그십 (flagship, 플래그십) 성과입니다. 그 이유는 슬라이드 8 (팔) 에서 자세히 보여드리겠습니다.
 
 ---
 
-## 슬라이드 6 · OpenSky ADS-B 작동 원리 / How ADS-B Works (60 초)
+## 슬라이드 6 · OpenSky ADS-B 작동 원리 (60 (육십) 초)
 
-ADS-B (에이디에스-비) 가 뭔지 모르는 학생들을 위해 짧게 설명드립니다.
+ADS-B (에이디에스-비) 가 무엇인지 모르시는 학생들을 위해 짧게 설명드리겠습니다. ADS-B 는 Automatic Dependent Surveillance-Broadcast (오토매틱 디펜던트 서베일런스 브로드캐스트) 의 약자입니다.
 
-For those unfamiliar with ADS-B — a quick explanation.
+슬라이드에 전체 흐름을 네 단계로 정리해 두었습니다. 먼저 항공기가 자기 위치를 스스로 방송합니다. 마치 자동차 블랙박스 같은 장치가 계속 "나 여기 있어요" 라고 외치는 모습을 상상하시면 됩니다. 그다음 지상 수신기 (ground receiver, 그라운드 리시버) 가 이 신호를 받는데, 전 세계에 35,000 (삼만 오천) 대가 설치되어 있고 대부분이 자원봉사자에 의해 운영됩니다. 수신된 데이터는 OpenSky (오픈스카이) 서버의 API (에이피아이) 로 전송되고, 마지막으로 제가 작성한 수집기가 30 (삼십) 초마다 OpenSky API 를 폴링 (polling, 폴링) 해서 Kafka (카프카) 의 flight-position (플라이트 포지션) 토픽 (topic, 토픽) 으로 publish (퍼블리시) 하도록 구현했습니다.
 
-**ADS-B = Automatic Dependent Surveillance-Broadcast (오토매틱 디펜던트 서베일런스 브로드캐스트)**
-
-슬라이드에 흐름이 나와있습니다.
-
-1. **항공기 (aircraft, 에어크래프트)** 가 자기 위치를 스스로 방송 (broadcast, 브로드캐스트) 합니다. 마치 자동차 블랙박스 (black box, 블랙박스) 같은 장치가 계속 "나 여기 있어요" 라고 외치는 것.
-2. **지상 수신기 (ground receiver, 그라운드 리시버)** 가 이 신호를 받습니다. 전 세계 35,000 대가 있고, 대부분 자원봉사자가 운영합니다.
-3. 수신기들이 데이터를 **OpenSky (오픈스카이) 서버 (API, 에이피아이)** 로 보냅니다.
-4. 저희는 30 초마다 OpenSky API 를 폴링 (polling, 폴링) 해서 **Kafka (카프카) 의 flight-position (플라이트 포지션) 토픽 (topic, 토픽)** 으로 publish (퍼블리시) 합니다.
-
-**한 편의 항공기에서 17 개 필드 (field, 필드) 가 들어옵니다.** 슬라이드 하단에 9 개만 뽑아 보여드렸습니다 — icao24 (아이카오 투포, 항공기 고유 ID), callsign (콜사인), lat/lon (랏/론), altitude (알티튜드), velocity (벨로시티), 등.
-
-Each aircraft sends **17 fields per update**. The bottom shows 9 key ones — unique ICAO24 hex ID, callsign, coordinates, altitude, and so on.
+한 편의 항공기에서 업데이트당 17 (열일곱) 개 필드 (field, 필드) 가 들어오는데, 슬라이드 하단에는 그중 9 (아홉) 개 핵심 필드만 뽑아서 보여드렸습니다. 항공기 고유 ID (아이디) 인 icao24 (아이카오 투포), 콜사인 (callsign, 콜사인), 위도와 경도, altitude (알티튜드), velocity (벨로시티) 같은 값들입니다.
 
 ---
 
-## 슬라이드 7 · METAR 해독 실습 / Decoding a METAR (60 초)
+## 슬라이드 7 · METAR 해독 실습 (60 (육십) 초)
 
-두 번째 소스는 METAR (메타) 기상 보고서인데, 처음 보면 암호 같아서 함께 해독해 봅시다.
+두 번째 소스인 METAR (메타) 기상 보고서는 처음 보면 암호처럼 보여서, 함께 해독해 보겠습니다. 슬라이드 상단의 검은 박스를 보시면 `RKSI 030900Z 29012KT 9999 SCT030 08/M02 Q1020` 이라는 한 줄이 있는데, 이 한 줄이 일곱 개의 토큰 (token, 토큰) 으로 분해됩니다.
 
-Our second source is METAR — it looks like code at first, so let's decode one together.
+먼저 **RKSI (알케이에스아이)** 는 인천국제공항을 가리키는 ICAO (아이카오) 코드이고, **030900Z (제로쓰리 제로나인제로제로 지)** 는 매월 3 (삼) 일 09 (영구) 시 정각 UTC (유티씨) 에 관측되었다는 뜻입니다. 그다음 **29012KT (투나인제로 원투 케이티)** 는 풍향이 290 (이백구십) 도, 풍속이 12 (십이) 노트 (knots, 노트) 라는 의미이고, **9999 (나인 나인 나인 나인)** 은 가시거리가 10 (십) 킬로미터 이상이라는 뜻입니다. 또 **SCT030 (에스씨티 제로쓰리제로)** 은 3,000 (삼천) 피트 (ft, 피트) 고도에 부분적인 구름이 있다는 표현이고, **08/M02 (제로에잇 슬래시 엠 제로투)** 는 기온 8 (팔) 도에 이슬점 영하 2 (이) 도, 마지막 **Q1020 (큐 원제로투제로)** 은 QNH (큐엔에이치) 압력이 1020 (천이십) 헥토파스칼 (hPa, 헥토파스칼) 이라는 의미입니다.
 
-슬라이드 상단의 검은 박스를 보세요.
-
-> `RKSI 030900Z 29012KT 9999 SCT030 08/M02 Q1020`
-
-이 한 줄을 7 개 토큰 (token, 토큰) 으로 나눌 수 있습니다.
-
-This single line decomposes into 7 tokens:
-
-- **RKSI (알케이에스아이)** = 인천국제공항 ICAO (아이카오) 코드 (Incheon Intl ICAO code)
-- **030900Z (제로쓰리 제로나인제로제로 지)** = 매월 3일 09:00 UTC (유티씨) 관측 (day-03 09:00 UTC)
-- **29012KT (투나인제로 원투 케이티)** = 풍향 290°, 풍속 12 노트 (knots, 노트) (wind from 290°, 12 knots)
-- **9999 (나인 나인 나인 나인)** = 가시거리 10 km 이상 (visibility ≥10 km)
-- **SCT030 (에스씨티 제로쓰리제로)** = 3,000 ft (피트) 에 구름 부분 있음 (scattered clouds at 3,000 ft)
-- **08/M02 (제로에잇 슬래시 엠 제로투)** = 기온 8°C / 이슬점 -2°C (temp 8°C / dewpoint -2°C)
-- **Q1020 (큐 원제로투제로)** = QNH (큐엔에이치) 압력 1020 hPa (헥토파스칼) (altimeter setting 1020 hPa)
-
-**항공 표준 (standard, 스탠다드)** 이라서 전 세계가 이 한 가지 포맷 (format, 포맷) 을 씁니다. 저희 코드가 이걸 파싱 (parsing, 파싱) 해서 JSON (제이슨) 으로 만들고, 다시 Avro (아브로) 로 바꿔 Kafka (카프카) 에 넣습니다.
-
-This is an **international aviation standard** — every airport worldwide uses it. Our parser turns it into JSON, then Avro, then pushes to Kafka.
+이 포맷은 국제 항공 표준 (standard, 스탠다드) 이라, 전 세계가 이 한 가지 포맷 (format, 포맷) 을 공통으로 사용합니다. 제가 작성한 파서 (parser, 파서) 가 이 문자열을 JSON (제이슨) 으로 파싱 (parsing, 파싱) 하고, 다시 Avro (아브로) 로 변환해서 Kafka 에 넣도록 파이프라인 (pipeline, 파이프라인) 을 구성했습니다.
 
 ---
 
-## 슬라이드 8 · FAA SWIM 실연동 — 플래그십 성과 / FAA SWIM Live Integration (90 초)
+## 슬라이드 8 · FAA SWIM 실연동 — 플래그십 성과 (90 (구십) 초)
 
-자, 별표가 붙었던 소스입니다. 이 프로젝트에서 **가장 자랑스러운 성과**라 슬라이드 한 장을 통째로 썼습니다.
+자, 앞에서 별표가 붙었던 소스입니다. 이 프로젝트에서 제가 가장 자랑스럽게 생각하는 성과라, 슬라이드 한 장을 통째로 썼습니다.
 
-Here's the starred source. **The most proud moment** of this project, so the whole slide.
+슬라이드 오른쪽 위의 주황 박스를 보시면 "60 (육십) 초, 219 (이백십구) 건, parse_err (파스 에러) 이퀄 0 (영)" 이라고 적혀 있습니다. 무슨 의미냐 하면, 미 연방항공청 (FAA, 에프에이에이) 의 프로덕션 (production, 프로덕션) 브로커 (broker, 브로커) 에 직접 연결해서 60 (육십) 초 안에 실제 NOTAM (노탐) 219 (이백십구) 건을 파싱 에러 0 (영) 건으로 수신했다는 뜻입니다.
 
-슬라이드 오른쪽 위에 주황 박스를 보시면 — "60 초 / 219 건 / parse_err (파스 에러) = 0" 이렇게 적혀 있습니다. 이게 무슨 뜻이냐면:
+대학 캡스톤 (capstone, 캡스톤) 프로젝트로서는 극히 드문 성과라고 생각합니다. 그 이유가 세 가지인데, 우선 일반적인 REST API (레스트 에이피아이) 가 아니라 Solace JMS (솔레이스 제이엠에스) 프로토콜 (protocol, 프로토콜) 을 써야만 접속이 되고, TLS 1.2 (티엘에스 원 포인트 투) 인증서 (certificate, 서티피킷) 검증도 필수라 그냥 접속해서는 절대 연결이 되지 않습니다. 게다가 AIXM 5.1 (에이아이엑스엠 파이브 포인트 원) 표준 XML (엑스엠엘) 파서를 직접 구현해야 했습니다.
 
-> 미 연방항공청 (FAA, 에프에이에이) 의 프로덕션 (production, 프로덕션) 브로커 (broker, 브로커) 에 직접 연결해서 60 초 안에 실제 NOTAM (노탐) 219 건을 파싱 (parsing, 파싱) 에러 0 으로 수신했다
+슬라이드 아래쪽의 빨간 박스에 제가 겪은 고생을 솔직히 적어 두었습니다. trust store (트러스트 스토어) 셋업 (setup, 셋업) 을 3 (세) 번 연속 실패하고, 4 (네) 번째에 겨우 성공했습니다. 결국 DigiCert Global Root G2 (디지서트 글로벌 루트 지투) 인증서를 수동으로 c_rehash (씨-리해시) 형식에 맞춰 import (임포트) 하고 나서야 해결할 수 있었습니다.
 
-In 60 seconds, we received **219 real NOTAMs from the US FAA production broker** with zero parse errors.
-
-**대학 캡스톤 (capstone, 캡스톤) 프로젝트로서는 극히 드문 성과** 입니다. 이유는:
-
-1. Solace JMS (솔레이스 제이엠에스) 프로토콜 (protocol, 프로토콜) 을 써야 함. 일반 REST API (레스트 에이피아이) 가 아닙니다.
-2. TLS 1.2 (티엘에스 원포인트투) 인증서 (certificate, 서티피킷) 검증 — 그냥 접속이 안 됩니다.
-3. AIXM 5.1 (에이아이엑스엠 파이브포인트원) XML (엑스엠엘) 표준 파서 (parser, 파서) 를 직접 구현해야 함.
-
-Why is this hard? **Solace JMS (not REST), TLS 1.2 cert verification, and custom AIXM 5.1 XML parsing**.
-
-슬라이드 아래쪽 빨간 박스에 제가 겪은 고생을 솔직히 적었습니다. **trust store (트러스트 스토어) 셋업 (setup, 셋업) 을 3 번 실패하고 4 번째에 성공**했습니다. 결국 DigiCert Global Root G2 (디지서트 글로벌 루트 지투) 인증서를 수동으로 c_rehash (씨-리해시) 형식으로 import (임포트) 해서 해결했습니다.
-
-I failed the trust store setup **three times** and succeeded on the fourth attempt. Eventually manually imported DigiCert Global Root G2 in c_rehash format.
-
-**여러분도 학부생으로서 이런 인프라 (infrastructure, 인프라스트럭처) 수준 integration (인티그레이션) 에 도전할 수 있다** 는 걸 보여주고 싶어서 자세히 설명드렸습니다.
-
-I share these failures to show that **undergraduate students CAN tackle production-level integrations** — you just need to not give up.
+여러분도 학부생 신분으로 이런 인프라 (infrastructure, 인프라스트럭처) 수준의 integration (인티그레이션) 에 도전하실 수 있다는 점을 꼭 보여드리고 싶어서, 이 실패 과정까지 그대로 공유드렸습니다.
 
 ---
 
-## 슬라이드 9 · Kaggle flights.csv EDA (70 초)
+## 슬라이드 9 · Kaggle flights.csv EDA (70 (칠십) 초)
 
-네 번째 소스인 Kaggle (캐글) 데이터는 실시간이 아닌 배치 (batch, 배치) 데이터입니다. **5.7 M (파이브포인트세븐 밀리언) 행 × 31 컬럼 (column, 컬럼), 580 MB (메가바이트).** US DOT (유에스 디오티) 의 2015 년 공식 통계.
+네 번째 소스인 Kaggle (캐글) 데이터는 실시간 스트림이 아니라 배치 (batch, 배치) 데이터입니다. 규모는 5.7M (파이브 포인트 세븐 밀리언), 즉 오백칠십만 행 곱하기 31 (삼십일) 컬럼 (column, 컬럼) 이고, 용량은 580 (오백팔십) 메가바이트 (MB, 엠비) 입니다. US DOT (유에스 디오티) 의 2015 (이천십오) 년 공식 통계입니다.
 
-The fourth source is a batch dataset — **5.7 million rows × 31 columns**, US DOT official 2015 statistics.
+슬라이드 오른쪽 위의 핵심 지표를 보시면 몇 가지가 눈에 띕니다. 지연된 편이 전체의 38.8% (삼십팔 점 팔 퍼센트) 이고, 취소가 3.4% (삼 점 사 퍼센트), 평균 도착 지연이 6.2 (육 점 이) 분입니다. 그런데 최대 지연이 무려 1,971 (천구백칠십일) 분인 편이 있었는데, 약 32 (삼십이) 시간 동안 지연된 항공편이 실제로 있었다는 뜻입니다.
 
-슬라이드 오른쪽 위의 핵심 지표를 보시면:
-- 지연된 편: **38.8 %** (flights with any delay)
-- 취소: 3.4 %
-- 평균 도착 지연: 6.2 분
-- 최대 지연: **1,971 분** — 약 32 시간 지연된 편이 있습니다 (!)
-
-The worst single delay was **1,971 minutes — over 32 hours!**
-
-슬라이드 아래의 막대 그래프 (bar chart, 바 차트) 가 이번 발표에서 중요한 발견입니다. **지연의 39.6% 가 '전편 지연 (cascade (캐스케이드) / reactionary (리액셔너리))'** 에서 옵니다.
-
-The bottom bar chart shows the key insight: **39.6% of delays are 'reactionary' — caused by the aircraft's previous leg being late**.
-
-이게 슬라이드 16 에서 제가 설명드릴 **Rotation features (로테이션 피처)** 의 도메인 근거입니다. 이 숫자를 기억해 주세요.
-
-This is the domain justification for the **Rotation features** I'll explain at slide 16. Remember this 40% figure.
+슬라이드 아래의 막대 그래프 (bar chart, 바 차트) 가 이번 발표에서 특히 중요한 발견입니다. 전체 지연의 39.6% (삼십구 점 육 퍼센트) 가 이른바 '전편 지연' 에서 발생하는데, 영어로는 cascade (캐스케이드) 또는 reactionary (리액셔너리) 딜레이라고 부릅니다. 이 숫자가 바로 슬라이드 16 (십육) 에서 말씀드릴 **Rotation features (로테이션 피처)** 의 도메인 근거가 되니, 이 40% (사십 퍼센트) 라는 숫자를 꼭 기억해 주시기 바랍니다.
 
 ---
 
-## 슬라이드 10 · 데이터 포맷의 진화 / Format Evolution (60 초)
+## 슬라이드 10 · 데이터 포맷의 진화 (60 (육십) 초)
 
-같은 항공기 위치 한 건을 세 가지 포맷 (format, 포맷) 으로 저장할 수 있습니다.
-
-The same aircraft position can be stored in three different formats.
+똑같은 항공기 위치 한 건이라도, 세 가지 포맷 (format, 포맷) 으로 저장할 수 있습니다.
 
 | 포맷 | 크기 | 장점 | 단점 |
 |---|---|---|---|
-| JSON (제이슨) | 100 B | 사람 읽기 쉬움 | 스키마 없음, 크기 큼 |
-| CSV (씨에스브이) | 60 B | 가장 가벼움 | 중첩 불가, 타입 없음 |
-| **Avro (아브로) ★** | 35 B | **스키마 강제 + 이진 압축** | 사람 직접 읽기 어려움 |
+| JSON (제이슨) | 100 B (백 바이트) | 사람이 읽기 쉬움 | 스키마 없음, 크기 큼 |
+| CSV (씨에스브이) | 60 B (육십 바이트) | 가장 가벼움 | 중첩 불가, 타입 없음 |
+| **Avro (아브로) ★** | 35 B (삼십오 바이트) | 스키마 강제와 이진 압축 | 사람이 직접 읽기 어려움 |
 
-**초당 수천 건** 이 흐르는 Kafka (카프카) 에서는 35 바이트 vs 100 바이트가 하루 누적 **수십 GB (기가바이트)** 차이를 만듭니다.
-
-At thousands of events per second, 35 B vs 100 B accumulates to **tens of GB/day**.
-
-하지만 크기보다 더 중요한 건 **스키마 강제 (schema enforcement, 스키마 인포스먼트)** 입니다. 다음 슬라이드에서 설명드립니다.
-
-But more important than size is **schema enforcement**, which I'll explain next.
+초당 수천 건이 흐르는 Kafka (카프카) 환경에서는 35 (삼십오) 바이트와 100 (백) 바이트의 차이가 하루 누적 수십 GB (기가바이트) 의 차이를 만듭니다. 하지만 제가 Avro (아브로) 를 선택한 가장 큰 이유는 크기보다 **스키마 강제 (schema enforcement, 스키마 인포스먼트)** 때문입니다. 이 부분은 다음 슬라이드에서 자세히 설명드리겠습니다.
 
 ---
 
-## 슬라이드 11 · 왜 Schema Registry? / Why Schema Registry? (75 초)
+## 슬라이드 11 · 왜 Schema Registry? (75 (칠십오) 초)
 
-실제로 있었던 시나리오 (scenario, 시나리오) 를 상상해 봅시다.
+실제로 일어날 수 있는 시나리오 (scenario, 시나리오) 를 상상해 보겠습니다.
 
-Imagine this real-world scenario.
+먼저 **스키마가 없을 때** 의 상황입니다. 개발자 A (에이) 가 producer (프로듀서) 에 새 필드 `speed_kt (스피드 케이티)` 를 추가하는데, 기존 consumer (컨슈머) 는 여전히 옛날 필드명인 `velocity_ms (벨로시티 엠에스)` 를 기대하고 있습니다. 배포 (deploy, 디플로이) 하자마자 서비스가 다운되고, consumer 는 `KeyError (키에러)` 를 던집니다. 이때 디버깅 (debugging, 디버깅) 질문은 항상 똑같습니다. "누가, 언제, 무엇을 바꿨는가?" 스키마 관리가 없으면 이 질문에 아무도 답할 수 없습니다.
 
-**BEFORE (비포어)** (스키마 없음 · no schema): 개발자 A 가 producer (프로듀서) 에 새 필드 `speed_kt (스피드 케이티)` 를 추가합니다. 하지만 기존 consumer (컨슈머) 는 옛 필드명 `velocity_ms (벨로시티 엠에스)` 를 기대하고 있죠. 배포 (deploy, 디플로이) 하자마자 → **💥 서비스 다운**, consumer 가 `KeyError (키에러)` 를 던집니다.
+이제 **Schema Registry (스키마 레지스트리) 에 BACKWARD (백워드) 호환 정책을 적용한 이후** 의 상황을 보겠습니다. 개발자 A 가 호환이 깨지는 변경을 시도하면, Schema Registry 가 배포 전에 거부하면서 `409 Conflict (포어오나인 컨플릭트), BACKWARD incompatible (백워드 인컴패터블)` 이라는 응답이 돌아옵니다. 즉, 장애가 프로덕션에 도달하기 전에 차단됩니다. 반대로 호환되는 변경, 예를 들어 default (디폴트) 값이 있는 새 필드를 추가하는 경우는 통과되고, 기존 consumer 는 default 값으로 안전하게 동작합니다.
 
-Dev A adds `speed_kt` to producer. Consumer still expects `velocity_ms`. Deploy → **crash**, KeyError.
-
-디버깅 (debugging, 디버깅) 질문: **누가 언제 무엇을 바꿨나?** 아무도 모릅니다.
-
-Debugging question: **who changed what when?** Nobody knows.
-
-**AFTER (애프터)** (Schema Registry (스키마 레지스트리) + BACKWARD (백워드) 호환): 개발자 A 가 호환 안 되는 변경을 시도하면 Schema Registry 가 **배포 전에 거부**합니다.
-
-> `409 Conflict (포어오나인 컨플릭트): BACKWARD incompatible (백워드 인컴패터블)`
-
-**배포 전에 막힘.** 호환되는 변경 — 예를 들어 default (디폴트) 값이 있는 새 필드 추가 — 는 통과됩니다. 기존 consumer (컨슈머) 는 default 값으로 안전하게 동작합니다.
-
-**Blocked before deployment.** Compatible changes (new field with default) pass; old consumers safely use the default.
-
-**BACKWARD (백워드) 호환** 이라는 개념이 핵심입니다. 이건 "새 consumer 가 옛 데이터도 읽을 수 있어야 한다" 는 뜻이에요. 덕분에 장애 시 **이전 버전으로 롤백 (rollback, 롤백) 이 안전** 합니다.
-
-**BACKWARD** means "new consumers must read old data." This makes **rollback safe during incidents**.
+여기서 **BACKWARD (백워드) 호환** 이라는 개념이 핵심인데, 이는 "새 consumer 가 옛날 데이터도 읽을 수 있어야 한다" 는 뜻입니다. 덕분에 장애 상황에서 이전 버전으로 롤백 (rollback, 롤백) 하는 것이 안전해집니다.
 
 ---
 
-## 슬라이드 12 · 전처리 6 단계 파이프라인 / 6-Step Pipeline (45 초)
+## 슬라이드 12 · 전처리 6 (여섯) 단계 파이프라인 (45 (사십오) 초)
 
-이제 본격적으로 데이터 가공 단계로 넘어갑니다.
+이제 본격적으로 데이터 가공 단계로 넘어가 보겠습니다.
 
-Now we move into data preprocessing.
+모든 ML (엠엘) 프로젝트는 결국 여섯 단계를 거치게 되는데, 첫 번째가 **Clean (클린)** 으로 결측값과 이상값, 중복을 제거하는 단계이고, 두 번째가 **Missing (미싱)** 으로 NaN (낸) 을 세 가지 전략으로 처리하는 단계입니다. 세 번째는 **Feature Engineering (피처 엔지니어링)** 으로 시간과 거리 같은 원본 값을 분해하는 단계이고, 네 번째가 이번 발표의 하이라이트인 **Rotation Features (로테이션 피처)** 로, 도메인 지식을 주입해서 R² (알제곱) 를 335% (삼백삼십오 퍼센트) 끌어올린 단계입니다. 그다음 다섯 번째는 **Split (스플릿)** 으로 TimeSeriesSplit (타임시리즈스플릿) 을 써서 시간순 분할을 하는 단계, 마지막 여섯 번째가 **Iceberg (아이스버그)** 로 Bronze, Silver, Gold (브론즈, 실버, 골드) 계층에 저장하는 단계입니다.
 
-모든 ML (엠엘) 프로젝트는 결국 **이 6 단계** 를 거칩니다.
-
-Every ML project ultimately goes through **these 6 steps**:
-
-1. **Clean (클린)** — 결측·이상·중복 제거
-2. **Missing (미싱)** — NaN (낸) 처리 (3 가지 전략)
-3. **Feature Eng. (피처 엔지니어링)** — 시간·거리 분해
-4. **Rotation Feats (로테이션 피츠) ★** — 도메인 지식 주입 (+335% R²)
-5. **Split (스플릿)** — TimeSeriesSplit (타임시리즈스플릿) 시간순
-6. **Iceberg (아이스버그)** — Bronze/Silver/Gold (브론즈/실버/골드) 저장
-
-슬라이드 하단의 INPUT (인풋) / OUTPUT (아웃풋) 박스를 보세요. **왼쪽은 5.7 M 행 × 사용 불가능한 raw (로우)**, 오른쪽은 **400k / 50k / 50k 의 model-ready (모델 레디) 학습 세트**. 이 변환이 여기 6 단계에서 일어납니다.
-
-Left box: 5.7M rows of unusable raw. Right box: **400k / 50k / 50k model-ready training set**. Steps 1-6 make this transformation.
+슬라이드 하단의 입력과 출력 박스를 보시면, 왼쪽에는 5.7M (파이브 포인트 세븐 밀리언), 즉 오백칠십만 행의 사용 불가능한 raw (로우) 데이터가 있고, 오른쪽에는 400k (포 헌드레드 케이) 즉 사십만, 50k (피프티 케이) 즉 오만, 50k 오만 행의 model-ready (모델 레디) 학습 세트가 있습니다. 이 변환이 바로 여기 여섯 단계 안에서 일어납니다.
 
 ---
 
-## 슬라이드 13 · Step 1 · Raw → Clean (60 초)
+## 슬라이드 13 · Step 1 · Raw → Clean (60 (육십) 초)
 
-진짜 원본 데이터가 얼마나 지저분한지 보여드리겠습니다.
+진짜 원본 데이터가 얼마나 지저분한지, 실제 모습을 보여드리겠습니다.
 
-Let me show you how dirty real raw data is.
+슬라이드 상단의 테이블 (table, 테이블) 에서, 분홍색으로 칠해진 행들이 문제가 있는 행입니다. 먼저 1 (일) 행과 2 (이) 행은 완전히 똑같은 레코드 (record, 레코드) 가 두 번 등장하는 전형적인 **중복 (duplicate, 듀플리케이트)** 상황이고, 3 (삼) 행은 AIRLINE (에어라인) 필드가 비어 있고 DEP_DELAY (뎁-딜레이) 가 null (널) 인 **결측 (missing, 미싱)** 상황입니다. 이어서 4 (사) 행의 DEP_DELAY 값은 `-9999 (마이너스 구천구백구십구)` 인데, 이건 실제 지연이 아니라 **센서 오류 마커 (sentinel value, 센티널 밸류)** 이고, 5 (오) 행의 DISTANCE (디스턴스) 는 `-1 (마이너스 일)` 로 거리가 음수일 수는 없으니 **범위 오류 (invalid range, 인밸리드 레인지)** 로 처리해야 합니다.
 
-슬라이드 상단의 테이블 (table, 테이블) 을 보시면, 분홍색으로 칠해진 행들이 문제가 있는 행입니다.
+하단의 네 개 박스가 각각에 대한 해결책입니다. 중복은 `drop_duplicates (드롭 듀플리케이츠)` 로 제거하고, 결측값은 다음 슬라이드에서 말씀드릴 세 가지 전략으로 처리합니다. sentinel (센티널) 값은 `-9999` 를 `NaN (낸)` 으로 치환해 두고, 범위 검증은 `distance > 0 (디스턴스 그레이터 댄 제로)` 같은 필터 (filter, 필터) 로 잡아냅니다.
 
-Pink rows = problematic rows.
-
-- 1-2 행: 완전히 똑같은 레코드 (record, 레코드) 가 두 번 있음 — **중복 (duplicate, 듀플리케이트)**
-- 3 행: AIRLINE (에어라인) 필드가 빈 칸, DEP_DELAY (뎁-딜레이) 가 null (널) — **결측 (missing, 미싱)**
-- 4 행: DEP_DELAY 가 `-9999` — 이건 지연이 아니라 **센서 오류 마커 (sentinel value, 센티널 밸류)** 입니다
-- 5 행: DISTANCE (디스턴스) 가 `-1` — 거리가 음수? **범위 오류 (invalid range, 인밸리드 레인지)**
-
-하단의 4 개 박스가 각각의 해결법입니다.
-
-Four solutions at the bottom:
-
-1. **중복 제거 (drop_duplicates (드롭 듀플리케이츠))**
-2. **결측값 처리** — 다음 슬라이드에서 3 가지 전략
-3. **Sentinel (센티널) 교체** — `-9999` → `NaN (낸)` 으로 변환
-4. **범위 검증** — `distance (디스턴스) > 0` 필터 (filter, 필터)
-
-**이걸 안 하고 바로 모델에 넣으면 GIGO (기고)** — Garbage In, Garbage Out (가비지 인, 가비지 아웃).
-
-Skip these and you get **GIGO — Garbage In, Garbage Out**.
+이 과정을 건너뛰고 데이터를 바로 모델에 넣으면, 흔히 말하는 **GIGO (기고)** 현상이 발생합니다. Garbage In, Garbage Out (가비지 인, 가비지 아웃), 즉 쓰레기를 넣으면 쓰레기가 나온다는 뜻입니다.
 
 ---
 
-## 슬라이드 14 · Step 2 · 결측값 (Missing Value) 3 전략 / Three Strategies (60 초)
+## 슬라이드 14 · Step 2 · 결측값 3 (세) 전략 (60 (육십) 초)
 
-결측값 처리는 세 가지 전략이 있습니다.
+결측값을 처리하는 방법에는 세 가지 전략이 있습니다.
 
-There are three strategies for missing values.
+첫 번째는 **Drop (드롭)** 으로, `df.dropna() (디에프 닷 드롭엔에이)` 를 써서 그냥 버리는 방식입니다. 가장 간단하지만 데이터가 많이 사라진다는 단점이 있습니다. 두 번째는 **Impute (임퓨트)** 로, 평균 (mean, 민) 이나 중간값 (median, 미디안) 으로 채우는 방법이고 보통 `SimpleImputer(mean) (심플 임퓨터 민)` 을 사용합니다. 데이터는 유지되지만 분산이 왜곡된다는 한계가 있습니다. 세 번째가 이 발표에서 특히 재미있는 부분인데, **XGBoost Native (엑스지부스트 네이티브)** 방식입니다. XGBoost 는 결측값을 '분할 방향 (split direction, 스플릿 디렉션)' 자체로 학습합니다. 즉, 트리 (tree, 트리) 의 각 노드 (node, 노드) 에서 "NaN (낸) 인 경우 왼쪽 자식으로 보낼지, 오른쪽으로 보낼지" 를 손실 (loss, 로스) 이 최소화되는 방향으로 직접 학습합니다.
 
-**① Drop (드롭)** — 그냥 버립니다 (`df.dropna() (디에프 닷 드롭엔에이)`). 가장 간단하지만 데이터가 많이 사라집니다.
+그래서 XGBoost 가 인기 있는 이유가 여기에 있습니다. 다른 모델들, 예를 들어 로지스틱 회귀 (logistic regression, 로지스틱 리그레션) 나 kNN (케이엔엔) 같은 모델은 NaN 이 하나라도 있으면 아예 학습조차 되지 않습니다.
 
-**② Impute (임퓨트)** — 평균 (mean, 민) 이나 중간값 (median, 미디안) 으로 채웁니다 (`SimpleImputer (심플 임퓨터) (mean)`). 데이터는 유지되지만 분산이 왜곡됩니다.
-
-**③ XGBoost Native (엑스지부스트 네이티브) ★** — 이게 재밌는 부분입니다. **XGBoost 는 결측값을 '분할 방향 (split direction, 스플릿 디렉션)' 으로 직접 다룹니다**. 즉 트리 (tree, 트리) 의 각 노드 (node, 노드) 에서 "NaN 인 경우 왼쪽 vs 오른쪽 중 어디로 보내야 손실 (loss, 로스) 이 최소화되는가" 를 학습합니다.
-
-**XGBoost handles NaN natively** — at each tree node, it learns the optimal direction for missing values (left vs right child).
-
-그래서 XGBoost (엑스지부스트) 가 인기 많은 이유가 여기 있습니다. **다른 모델 (로지스틱 회귀 (logistic regression, 로지스틱 리그레션), kNN (케이엔엔) 등) 은 NaN (낸) 이 있으면 아예 학습이 안 됩니다.**
-
-This is a key reason XGBoost is so popular. **Other models like logistic regression or kNN can't even train with NaN present.**
-
-저희는 실제로 **① Impute 와 ③ Native 를 동시에** 씁니다 — sklearn (에스케이런) Pipeline (파이프라인) 에 SimpleImputer (심플 임퓨터) 를 넣고 최종 estimator (에스티메이터) 는 XGBoost. 이중 안전망.
-
-We use **① + ③ together** — SimpleImputer in the sklearn Pipeline, XGBoost as the final estimator. Double safety net.
+저는 실제로 Impute 와 Native 를 동시에 사용하고 있습니다. sklearn (에스케이런) 의 Pipeline (파이프라인) 에 SimpleImputer (심플 임퓨터) 를 넣고, 최종 estimator (에스티메이터) 로 XGBoost 를 두는 구조라서, 이중 안전망인 셈입니다.
 
 ---
 
-## 슬라이드 15 · Step 3 · Feature Engineering 기초 / Basics (60 초)
+## 슬라이드 15 · Step 3 · Feature Engineering 기초 (60 (육십) 초)
 
-모델은 **문자열 (string, 스트링) 을 읽지 못합니다**. 오직 숫자만 이해합니다.
+모델은 문자열 (string, 스트링) 을 읽지 못합니다. 오직 숫자만 이해할 수 있습니다.
 
-Models **can't read strings**. Only numbers.
+슬라이드 왼쪽의 빨간 박스를 보시면 `"2026-04-19 14:30:00" (이천이십육 다시 영사 다시 십구 공백 십사 시 삼십 분 영 초)` 같은 datetime (데이트타임) 문자열이 있습니다. 이 문자열을 그대로 모델에 넣으면 모델은 아무 정보도 얻지 못합니다. 반면 오른쪽의 초록 박스에서는 같은 정보를 여섯 개의 숫자 피처 (feature, 피처) 로 분해하고 있습니다. hour (아워) 는 14 (십사), minute (미닛) 은 30 (삼십), dayofweek (데이오브위크) 는 6 (육) 이라서 토요일, month (먼스) 는 4 (사), dayofyear (데이오브이어) 는 109 (백구), is_weekend (이즈 위켄드) 는 1 (일) 로 표현됩니다.
 
-슬라이드 왼쪽 빨간 박스: `"2026-04-19 14:30:00"` 이런 datetime (데이트타임) 문자열을 그대로 넣으면 모델이 아무 정보도 못 받습니다.
+그럼 왜 이렇게 분해 (decompose, 디컴포즈) 해야 할까요? 하단 남색 박스에 세 가지 이유를 정리해 두었습니다. 우선 주중과 주말은 완전히 다릅니다. 평일 18 (십팔) 시의 혼잡도와 토요일 18 시의 혼잡도는 아예 다른 패턴을 보입니다. 그리고 월별 패턴 (pattern, 패턴) 도 존재하는데, 여름인 7 (칠), 8 (팔) 월은 휴가철이라 지연이 많고 봄인 4 (사), 5 (오) 월은 상대적으로 조용합니다. 마지막으로 시간대별 패턴도 있어서, 오전 6 (여섯) 시 출발편은 거의 정시인 반면 저녁 18 (열여덟) 시 출발편은 지연이 누적되기 쉽습니다.
 
-오른쪽 초록 박스: **같은 정보를 6 개 숫자 feature (피처) 로 분해**합니다.
-
-- hour (아워) = 14
-- minute (미닛) = 30
-- dayofweek (데이오브위크) = 6 (토요일)
-- month (먼스) = 4
-- dayofyear (데이오브이어) = 109
-- is_weekend (이즈 위켄드) = 1
-
-**왜 이렇게 분해 (decompose, 디컴포즈) 하나?** 하단 남색 박스의 3 가지 이유:
-
-1. **주중 ≠ 주말** — 평일 18 시 혼잡도는 토요일 18 시 혼잡도와 완전히 다릅니다.
-2. **월별 패턴 (pattern, 패턴)** — 여름 7·8 월은 휴가철이라 지연이 많고, 봄 4·5 월은 조용합니다.
-3. **시간대 패턴** — 오전 6 시 출발은 거의 정시, 저녁 18 시는 지연이 누적됩니다.
-
-The model needs to **see these patterns independently**. A single datetime string hides them all.
+모델이 이런 패턴들을 각각 독립적으로 '볼 수 있도록' 해주는 것, 이것이 바로 Feature Engineering (피처 엔지니어링) 의 출발점입니다.
 
 ---
 
-## 슬라이드 16 · Step 4 · Rotation Features — 실제 사례 ★ (90 초)
+## 슬라이드 16 · Step 4 · Rotation Features — 실제 사례 ★ (90 (구십) 초)
 
-**이 발표에서 가장 중요한 슬라이드입니다.** 잘 들어주세요.
+이 슬라이드는 이번 발표에서 가장 중요한 슬라이드입니다. 잘 들어주시기 바랍니다.
 
-This is **the most important slide in this talk**. Please listen carefully.
+왼쪽 남색 박스의 큰 숫자를 먼저 봐주세요. Test R² (테스트 알제곱) 가 0.10 (제로 포인트 일공) 에서 0.43 (제로 포인트 사삼) 으로, 335% (삼백삼십오 퍼센트) 상승했습니다. 같은 XGBoost (엑스지부스트) 모델을 사용했고, 피처 (feature, 피처) 5 (다섯) 개만 추가했을 뿐입니다. 모델을 키운 것도 아니고, 데이터를 더 수집한 것도 아닙니다.
 
-왼쪽 남색 박스의 큰 숫자를 보세요.
+어떻게 이것이 가능했을까요? 오른쪽 박스에 핵심 아이디어가 있습니다.
 
-> **Test R² (테스트 알제곱) : 0.10 → 0.43** · +335%
+> "같은 비행기가 하루에 3 (세) 번에서 5 (다섯) 번 뜬다."
 
-같은 XGBoost (엑스지부스트) 모델인데, **피처 (feature, 피처) 5 개만 추가했을 뿐입니다**. 모델을 키운 것도 아니고 데이터를 더 수집한 것도 아닙니다.
+슬라이드 중앙에 있는 HL8281 (에이치엘 에잇투에잇원) 편의 하루를 보시면 이해가 빠르실 겁니다. 06 (영육) 시에 ICN (아이씨엔), 즉 인천에서 CJU (씨제이유), 즉 제주로 갈 때는 지연이 2 (이) 분이라 정상이고, 09 (영구) 시에 제주에서 인천으로 돌아올 때는 5 (오) 분으로 조금 누적됩니다. 그다음 12 (십이) 시 인천발 제주행은 12 (십이) 분, 15 (십오) 시 제주발 인천행은 24 (이십사) 분까지 올라가고, 18 (십팔) 시 인천발 제주행에 가면 무려 45 (사십오) 분까지 지연이 쌓이게 됩니다.
 
-Same XGBoost model. **Just 5 new features added.** No bigger model, no more data.
+지연은 이렇게 눈덩이처럼 굴러갑니다. 영어로는 snowball (스노볼) 이라고 표현합니다. EUROCONTROL (유로컨트롤) 의 연구에 따르면, 전체 지연의 45% (사십오 퍼센트) 가 이렇게 누적된 reactionary delay (리액셔너리 딜레이) 입니다.
 
-**어떻게 이게 가능했나?** 오른쪽 박스의 핵심 아이디어:
+기존 모델은 항공편 하나하나를 독립적으로 보고 있었습니다. 그래서 제가 다섯 개 피처를 새로 추가했습니다. 먼저 `rotation_depth (로테이션 뎁스)` 는 당일 몇 번째 leg (렉) 인지를 0 (영) 부터 카운트하는 값이고, `prev_leg_arr_delay_min (프리브 렉 에이알알 딜레이 민)` 은 직전 leg 가 얼마나 지연됐는지를 기록합니다. 이어서 `scheduled_turnaround_min (스케줄드 턴어라운드 민)` 은 예정된 지상 체류 시간, `actual_turnaround_min (액추얼 턴어라운드 민)` 은 실제 지상 체류 시간을 나타내고, 마지막 `is_first_leg_of_day (이즈 퍼스트 렉 오브 데이)` 는 그날의 첫 leg 이면 1 (일) 로 표시하는 플래그입니다. 이 다섯 개 피처만으로 R² 가 3.35 (쓰리 포인트 삼오) 배가 됐습니다.
 
-> "**같은 비행기가 하루에 3-5 번 뜬다.**"
-> "Same aircraft flies 3-5 legs per day."
-
-슬라이드 중앙의 비행기 아이콘 HL8281 (에이치엘 에잇투에잇원) 하루를 보세요.
-
-- 06:00 ICN (아이씨엔) → CJU (씨제이유), 지연 +2 분 (정상)
-- 09:00 CJU → ICN, 지연 +5 분 (조금 누적)
-- 12:00 ICN → CJU, 지연 +12 분 (더 누적)
-- 15:00 CJU → ICN, 지연 +24 분 (계속 누적)
-- 18:00 ICN → CJU, 지연 +45 분 (최악)
-
-**지연은 눈덩이처럼 굴러갑니다 (snowball, 스노볼).** EUROCONTROL (유로컨트롤) 연구에 따르면 전체 지연의 **45% 는 이렇게 누적된 것** 입니다 (reactionary delay, 리액셔너리 딜레이).
-
-According to EUROCONTROL research, **45% of all delays are reactionary** — caused by cascading from earlier legs.
-
-기존 모델은 항공편 한 개만 독립적으로 봤습니다. 저희가 추가한 5 개 피처 (feature, 피처) 는:
-
-- `rotation_depth (로테이션 뎁스)` — 당일 몇 번째 leg (렉) 인가 (0 = 첫 leg)
-- `prev_leg_arr_delay_min (프리브 렉 에이알알 딜레이 민)` — 직전 leg 가 얼마나 지연됐나
-- `scheduled_turnaround_min (스케줄드 턴어라운드 민)` — 예정 지상 체류 시간
-- `actual_turnaround_min (액추얼 턴어라운드 민)` — 실제 지상 체류 시간
-- `is_first_leg_of_day (이즈 퍼스트 렉 오브 데이)` — 첫 leg 면 1
-
-이 5 개로 R² 가 3.35 배가 됐습니다.
-
-**교훈: 모델을 키우는 것보다 도메인 지식 (domain knowledge, 도메인 날리지) 을 feature (피처) 로 만드는 것이 훨씬 효과적입니다.**
-
-**Lesson: Domain knowledge as features beats bigger models.**
+교훈은 명확합니다. 모델을 키우는 것보다, 도메인 지식 (domain knowledge, 도메인 날리지) 을 피처로 만드는 것이 훨씬 효과적입니다.
 
 ---
 
-## 슬라이드 17 · Step 5 · Train/Test Split — 흔한 실수 (90 초)
+## 슬라이드 17 · Step 5 · Train/Test Split — 흔한 실수 (90 (구십) 초)
 
-두 번째로 중요한 교훈입니다. **초심자가 가장 많이 하는 치명적 실수.**
+두 번째로 중요한 교훈을 말씀드리겠습니다. 초심자가 가장 많이 범하는 치명적인 실수에 관한 이야기입니다.
 
-The second most important lesson — **the most common critical mistake by beginners**.
+왼쪽 빨간 박스의 `train_test_split(shuffle=True) (트레인 테스트 스플릿 셔플 이퀄 트루)` 를 봐주세요. 이것이 sklearn (에스케이런) 의 기본값인데, 시간 축을 무시하고 무작위로 섞어서 데이터를 나눕니다. 시각화를 보시면 훈련 (train, 트레인) 과 평가 (test, 테스트) 가 뒤섞여 있는 것을 확인하실 수 있는데, TR (티알), TE (티이), TR, TR, TE, TR, TE 이런 식으로 시간 축을 따라 완전히 섞여 있습니다.
 
-왼쪽 빨간 박스: `train_test_split(shuffle=True) (트레인 테스트 스플릿 셔플 트루)` — sklearn (에스케이런) 의 기본값입니다. 시간 축을 무시하고 무작위로 섞어서 나눕니다.
+여기서 치명적인 문제가 발생합니다. 바로 **미래가 과거 훈련에 섞여 들어가는 것** (future leaks into past training, 퓨처 리크스 인투 패스트 트레이닝) 입니다. 예를 들어, 4 (사) 월 19 (십구) 일 데이터로 4 월 15 (십오) 일을 예측하는 상황이 생기는데, 말이 안 되죠. 그런데 평가 결과는 오히려 비정상적으로 좋게 보입니다. CV (씨브이) 표준편차가 고작 플러스마이너스 0.30 (제로 포인트 삼공) 정도로 나오는데, 이것이 바로 **낙관적 편향 (optimistic bias, 옵티미스틱 바이어스)** 입니다.
 
-`train_test_split(shuffle=True)` is sklearn's default — ignores time, shuffles randomly.
+오른쪽 초록 박스의 `TimeSeriesSplit(n_splits=5) (타임시리즈스플릿 엔 스플릿츠 이퀄 파이브)` 는 walk-forward (워크포워드) 방식을 사용합니다. TR, TR, TR, TR, TR, TR, TR 다음에 TE, TE, TE 가 오는 구조인데, 왼쪽 7 (일곱) 칸으로 학습하고 오른쪽 3 (세) 칸으로 평가합니다. 즉, 학습은 항상 과거만 사용하고, 평가는 항상 미래로만 진행합니다.
 
-시각화를 보면 **TR (티알) · TE (티이) · TR · TR · TE · TR · TE · TR · TR · TE** — 시간축을 따라 train 과 test 가 섞여 있습니다.
+결과적으로 CV 표준편차가 플러스마이너스 6.14 (육 점 일사) 로 20 (이십) 배 증가합니다. 겉보기에는 나빠진 것 같지만, 이것이 바로 정직한 수치입니다. 시간대별 성능 변동성 (temporal variance, 템포럴 배리언스) 이 비로소 드러난 것이기 때문입니다.
 
-**💥 미래가 과거 훈련에 섞여 들어갑니다 (future leaks into past training, 퓨처 리크스 인투 패스트 트레이닝).**
-
-예를 들어 4 월 19 일 데이터로 4 월 15 일 데이터를 예측하는 상황이 생깁니다. 말도 안 되죠. 평가 결과는 비정상적으로 좋게 보입니다 — CV (씨브이) 표준편차 ±0.30. **낙관적 편향 (optimistic bias, 옵티미스틱 바이어스)** 입니다.
-
-**A model 'predicting' April 15 using April 19 data — nonsense.** Evaluation looks artificially great (CV std ±0.30) — **optimistic bias**.
-
-오른쪽 초록 박스: `TimeSeriesSplit(n_splits=5) (타임시리즈스플릿 엔 스플릿츠 파이브)` — walk-forward (워크포워드) 방식.
-
-**TR TR TR TR TR TR TR · TE TE TE** — 왼쪽 7 칸으로 학습, 오른쪽 3 칸으로 평가. 학습은 항상 과거만, 평가는 항상 미래만.
-
-**Train on past, evaluate on future.**
-
-결과는 CV (씨브이) 표준편차 ±6.14 — 20 배 늘어났습니다. **겉보기엔 나빠 보이지만 이게 정직한 수치** 입니다. 시간대별 성능 변동성 (temporal variance, 템포럴 배리언스) 이 드러난 것.
-
-CV std jumped 20×, but this is the **honest number** — temporal variance now visible.
-
-저희는 이걸 **ADR-004 (에이디알 영영사) 에 원칙으로 명시** 하고 전체 파이프라인을 수정했습니다. 여러분 코드에서 `shuffle=True` 가 시계열 데이터에 쓰이고 있다면 **지금 당장 고치세요**.
-
-We codified this in **ADR-004** and fixed the whole pipeline. **If your code uses `shuffle=True` on time-series data, fix it now.**
+저는 이 원칙을 ADR-004 (에이디알 영영사) 에 명시하고, 파이프라인 (pipeline, 파이프라인) 전체를 수정했습니다. 혹시 여러분 코드 중에 `shuffle=True (셔플 이퀄 트루)` 가 시계열 데이터에 적용되고 있다면, 지금 당장 고치시기 바랍니다.
 
 ---
 
-## 슬라이드 18 · Step 6 · Iceberg Medallion (60 초)
+## 슬라이드 18 · Step 6 · Iceberg Medallion (60 (육십) 초)
 
-마지막 전처리 단계는 저장입니다. 그냥 CSV (씨에스브이) 에 저장하면 되지 않나? 아닙니다.
+전처리의 마지막 단계는 저장입니다. 그냥 CSV (씨에스브이) 에 저장하면 되지 않을까 싶지만, 그렇지 않습니다.
 
-The final preprocessing step is storage. Just save CSV? No.
+저는 **Apache Iceberg (아파치 아이스버그)** 의 **Medallion (메달리언) 아키텍처** 를 사용했습니다. Bronze (브론즈), Silver (실버), Gold (골드) 세 계층으로 데이터를 분리하는 방식입니다.
 
-**Apache Iceberg (아파치 아이스버그) 의 Medallion (메달리언) 아키텍처** — Bronze (브론즈), Silver (실버), Gold (골드) 3 계층으로 분리합니다.
+가장 아래의 **Bronze 🥉 계층** 은 원본 그대로 저장하는 층입니다. JSON (제이슨) 과 XML (엑스엠엘) 을 가공 없이 그대로 담아두기 때문에, 나중에 "어라, 이 데이터를 다시 처리해야겠네" 하는 순간이 오면 여기로 돌아오면 됩니다. 그 위의 **Silver 🥈 계층** 은 정제와 조인 (join, 조인) 이 완료된 데이터인데, 기상 데이터와 위치 데이터를 합쳐서 flight_features (플라이트 피처스) 라는 통합 테이블을 만듭니다. 가장 위의 **Gold 🥇 계층** 은 모델이 직접 소비하는 테이블들이고, inference_log (인퍼런스 로그) 나 anomaly_decisions (어노멀리 디시전스) 같은 감사 목적의 테이블도 여기 있습니다.
 
-**Bronze 🥉** — 원본 그대로 저장합니다. JSON, XML 그대로. 나중에 "어라, 이 데이터 다시 처리해야 하네" 할 때 여기로 돌아옵니다.
-*Raw as-ingested. Go back here for reprocessing.*
-
-**Silver 🥈** — 정제 + 조인 (join, 조인). 기상 데이터 + 위치 데이터를 합쳐서 flight_features (플라이트 피처스) 만듭니다.
-*Cleaned + joined. Multiple sources merged.*
-
-**Gold 🥇** — 모델이 직접 소비하는 테이블. inference_log (인퍼런스 로그), anomaly_decisions (어노멀리 디시전스) 같은 감사용 테이블.
-*Model-ready + audit trail.*
-
-**왜 3 계층인가?** 하단 남색 박스에 3 가지 이유:
-
-1. **ACID (에이시드) 트랜잭션 (transaction, 트랜잭션)** — 쓰기 실패해도 일관성 유지
-2. **스키마 진화 (schema evolution, 스키마 에볼루션)** — 필드 추가/변경 가능
-3. **Time travel (타임 트래블)** — "3 일 전 이 테이블은 어떤 상태였지?" 쿼리 (query, 쿼리) 가능 → 사고 조사 (forensics, 포렌식스) 에 필수
-
-**For incident forensics**, being able to ask "what was this table on April 15?" is essential.
+그럼 왜 굳이 세 계층으로 나눌까요? 하단 남색 박스에 세 가지 이유가 있는데, 먼저 **ACID (에이시드) 트랜잭션 (transaction, 트랜잭션)** 을 지원해서 쓰기가 실패해도 일관성이 유지된다는 점, 그리고 **스키마 진화 (schema evolution, 스키마 에볼루션)** 가 가능해서 필드 (field, 필드) 를 나중에 추가하거나 변경할 수 있다는 점이 있습니다. 마지막으로 **Time travel (타임 트래블)** 기능이 있어서, "3 (삼) 일 전에 이 테이블은 어떤 상태였지?" 같은 쿼리 (query, 쿼리) 가 가능합니다. 사고 조사 (forensics, 포렌식스) 에 있어 이 기능은 필수입니다.
 
 ---
 
-## 슬라이드 19 · 이 데이터로 만들 수 있는 것들 / What Can You Build? (60 초)
+## 슬라이드 19 · 이 데이터로 만들 수 있는 것들 (60 (육십) 초)
 
-이제 재밌는 부분입니다. **같은 데이터 셋으로 만들 수 있는 프로젝트가 8 가지 이상 있습니다.**
+이제 재미있는 부분입니다. 같은 데이터 셋으로 만들 수 있는 프로젝트가 최소 여덟 가지나 됩니다.
 
-Now the fun part. **You can build at least 8 different projects with the same dataset.**
+먼저 ⏱ 지연 예측 (delay prediction, 딜레이 프리딕션) 이 있는데, 이것이 바로 제 프로젝트의 한 축입니다. 그다음으로 💰 항공권 가격 예측 (ticket price forecast, 티켓 프라이스 포어캐스트) 과 🏢 공항 혼잡도 예측 (airport congestion, 에어포트 컨제스천) 이 있고, ⛽ 연료 소비 최적화 (fuel efficiency, 퓨얼 이피션시) 와 🗺 운항 경로 최적화 (route optimization, 루트 옵티미제이션) 도 가능합니다. 또 🌪 기상 영향 분석 (weather impact, 웨더 임팩트) 과 ⚠ 이상 탐지 (anomaly detection, 어노멀리 디텍션) 가 있는데, 이 이상 탐지가 제 프로젝트의 또 다른 축입니다. 마지막으로 👥 승객 수요 예측 (demand forecasting, 디맨드 포어캐스팅) 까지 해서 여덟 가지가 됩니다.
 
-- ⏱ 지연 예측 (Delay prediction, 딜레이 프리딕션) — **우리 프로젝트**
-- 💰 항공권 가격 예측 (Ticket price forecast, 티켓 프라이스 포어캐스트)
-- 🏢 공항 혼잡도 예측 (Airport congestion, 에어포트 컨제스천)
-- ⛽ 연료 소비 최적화 (Fuel efficiency, 퓨얼 이피션시)
-- 🗺 운항 경로 최적화 (Route optimization, 루트 옵티미제이션)
-- 🌪 기상 영향 분석 (Weather impact, 웨더 임팩트)
-- ⚠ 이상 탐지 (Anomaly detection, 어노멀리 디텍션) — **우리 프로젝트**
-- 👥 승객 수요 예측 (Demand forecasting, 디맨드 포어캐스팅)
-
-**같은 데이터, 다른 질문, 다른 프로젝트.** 여러분이 선택한 질문이 프로젝트의 정체성을 만듭니다.
-
-**Same data, different questions, different projects.** The question you choose defines your project's identity.
-
-저희는 8 개 중 2 개 — 지연 예측과 이상 탐지 — 를 선택했습니다. **왜?** 둘 다 관제사의 실제 의사결정에 직접 기여하기 때문입니다.
-
-Why these two? Because they **directly impact the ATC's real-time decisions**.
+결국 같은 데이터이지만 다른 질문, 다른 프로젝트가 만들어지는 것입니다. 여러분이 선택한 질문이, 곧 여러분 프로젝트의 정체성을 결정합니다. 저는 이 여덟 가지 중에서 지연 예측과 이상 탐지, 두 가지를 선택했습니다. 이유는 둘 다 관제사의 실시간 의사결정에 직접 기여하기 때문입니다.
 
 ---
 
-## 슬라이드 20 · 우리가 만든 것 / What WE Built (60 초)
+## 슬라이드 20 · 제가 만든 것 (60 (육십) 초)
 
-우리가 만든 3 가지 기능을 한 슬라이드에 모았습니다.
+제가 직접 만든 세 가지 기능을 한 슬라이드에 모아 봤습니다.
 
-Three features we built, all on one slide.
+첫 번째는 **지연 예측과 신뢰구간 (confidence interval, 컨피던스 인터벌)** 기능입니다. XGBoost (엑스지부스트) 의 Test R² (테스트 알제곱) 는 0.43 (제로 포인트 사삼) 이고, Conformal (컨포멀) 이 90% (구십 퍼센트) 커버리지 (coverage, 커버리지) 를 보장합니다. 그 덕분에 관제사는 "90% 확률로 6 (육) 분에서 41 (사십일) 분 사이의 지연이 예상됩니다" 라는 정량적인 정보를 받게 됩니다.
 
-**① 지연 예측 + 신뢰구간 (confidence interval, 컨피던스 인터벌)** — XGBoost (엑스지부스트) Test R² 0.43, Conformal (컨포멀) 90% 커버리지 (coverage, 커버리지). 관제사가 "90% 확률로 6~41 분 지연" 이라는 정량 정보를 받습니다.
-*Conformal interval gives quantified uncertainty, not just a point estimate.*
+두 번째는 **비행 단계별 이상 탐지** 기능입니다. Isolation Forest (아이솔레이션 포레스트) 를 7 (일곱) 개 운영하고 있고, 단일 모델 대비 alert fatigue (얼럿 패티그) 를 67% (육십칠 퍼센트) 줄였습니다. 자세한 내용은 슬라이드 25 (이십오) 에서 말씀드리겠습니다.
 
-**② 이상 탐지 (7 단계별)** — Isolation Forest (아이솔레이션 포레스트) 7 개. 단일 모델 대비 alert fatigue (얼럿 패티그) −67%. 슬라이드 25 에서 자세히.
-*7 phase-specific IF models, 67% fewer false positives.*
+세 번째는 **AI (에이아이) 관제 어시스턴트 (assistant, 어시스턴트)** 입니다. Qwen2.5-7B (큐웬 투 포인트 파이브 세븐비) 모델을 기반으로, QLoRA (큐로라) 와 DPO (디피오) 를 직접 적용해서 파인튜닝 (fine-tuning, 파인튜닝) 한 한국어 LLM (엘엘엠) 입니다. RAG (라그) 로 161 (백육십일) 개의 chunks (청크스) 규정집을 참조해서, 5 (오) 초 이내에 출처가 포함된 답변을 생성합니다.
 
-**③ AI (에이아이) 관제 어시스턴트 (assistant, 어시스턴트)** — Qwen2.5-7B (큐웬 투포인트파이브 세븐비) + QLoRA (큐로라) + DPO (디피오) 로 제가 직접 파인튜닝 (fine-tuning, 파인튜닝) 한 한국어 LLM (엘엘엠). RAG (라그) 로 161 chunks (청크스) 규정집 참조. 5 초 이내 출처 포함 답변.
-*Custom fine-tuned Korean LLM + RAG, 5-second response with citations.*
-
-**세 기능이 독립적으로 보이지만 같은 데이터 파이프라인에서 흘러나옵니다.** 지연 예측은 silver_flight_features (실버 플라이트 피처스), 이상 탐지는 aircraft_phase (에어크래프트 페이즈), RAG 는 ChromaDB (크로마디비) — 모두 같은 Iceberg (아이스버그) 위에.
-
-**Three features, one pipeline.**
+세 기능이 독립적으로 보일 수 있지만, 실제로는 같은 데이터 파이프라인 (pipeline, 파이프라인) 에서 흘러나옵니다. 지연 예측은 silver_flight_features (실버 플라이트 피처스), 이상 탐지는 aircraft_phase (에어크래프트 페이즈), RAG 는 ChromaDB (크로마디비) 를 쓰는데, 이 모두가 같은 Iceberg (아이스버그) 기반 위에 올라가 있습니다.
 
 ---
 
-## 슬라이드 21 · 모델 1 · 왜 XGBoost? / Why XGBoost? (60 초)
+## 슬라이드 21 · 모델 1 · 왜 XGBoost? (60 (육십) 초)
 
-지연 예측 모델로 XGBoost (엑스지부스트) 를 선택한 이유 4 가지.
+지연 예측 모델로 XGBoost (엑스지부스트) 를 선택한 이유가 네 가지 있습니다.
 
-Four reasons we chose XGBoost for delay prediction.
+첫째는 **정확도 (accuracy, 어큐러시)** 입니다. tabular (태뷸러) 데이터에서는 딥러닝 (deep learning, 딥러닝) 과 동등하거나 오히려 더 나은 성능을 보이고, 피처가 20 (이십) 개에서 30 (삼십) 개 이하인 tabular 데이터는 XGBoost 의 홈그라운드라고 해도 과언이 아닙니다. 둘째는 **속도 (speed, 스피드)** 입니다. 5.7M (파이브 포인트 세븐 밀리언), 즉 오백칠십만 행을 CPU (씨피유) 만으로 4 (사) 분 안에 학습할 수 있어서, GPU (지피유) 가 전혀 필요 없습니다. 셋째는 **해석성 (explainability, 익스플레이너빌리티)** 인데, SHAP TreeExplainer (샤프 트리익스플레이너) 를 사용하면 "왜 이 항공편이 15 (십오) 분 지연된다고 예측했는가" 를 각 피처의 기여도로 시각화할 수 있습니다. 즉, 관제사에게 근거를 명확하게 제시할 수 있다는 뜻입니다. 넷째는 **Robustness (로버스트니스)** 로, 결측값을 자동으로 처리하고 이상치에 강하며 normalization (노멀라이제이션) 도 필요하지 않습니다.
 
-**① 정확도 (Accuracy, 어큐러시)** — tabular (태뷸러) 데이터에서 딥러닝 (deep learning, 딥러닝) 과 **동등하거나 더 낫습니다**. 피처 20-30 개 이하 tabular 데이터는 XGBoost 의 홈그라운드.
-
-**② 속도 (Speed, 스피드)** — 5.7 M 행을 **CPU (씨피유) 만으로 4 분** 에 학습. GPU (지피유) 필요 없습니다.
-
-**③ 해석성 (Explainability, 익스플레이너빌리티)** — SHAP TreeExplainer (샤프 트리익스플레이너) 로 "왜 이 항공편이 15 분 지연된다고 예측했는가" 를 각 feature (피처) 기여도로 시각화할 수 있습니다. **관제사에게 근거를 제시** 할 수 있다는 뜻.
-
-**④ Robustness (로버스트니스)** — 결측값 자동 처리, 이상치에 강하고, normalization (노멀라이제이션) 필요 없습니다.
-
-실무에서 가장 중요한 건 **3 번 해석성** 입니다. 관제사는 "왜?" 를 물을 때 납득할 만한 답을 원합니다. 딥러닝의 블랙박스 (black box, 블랙박스) 로는 그걸 못 합니다.
-
-**In practice, explainability (reason 3) is most important.** ATC wants to know 'why' — deep learning black box fails here.
+실무에서 가장 중요한 것은 세 번째인 해석성이라고 저는 생각합니다. 관제사는 "왜?" 라는 질문을 던질 때 납득할 만한 답을 원하는데, 딥러닝의 블랙박스 (black box, 블랙박스) 로는 그것을 제공할 수 없습니다.
 
 ---
 
-## 슬라이드 22 · XGBoost 작동 원리 / How Gradient Boosting Works (75 초)
+## 슬라이드 22 · XGBoost 작동 원리 (75 (칠십오) 초)
 
-XGBoost (엑스지부스트) 가 어떻게 작동하는지 한 줄로 설명드리면:
+XGBoost (엑스지부스트) 가 어떻게 작동하는지, 한 줄로 설명드리면 이렇습니다.
 
-The one-sentence explanation:
+> "여러 개의 약한 모델 (weak learner, 위크 러너) 을 순차적으로 만들되, 이전 모델의 오차 (error, 에러) 에만 집중해서 학습한다."
 
-> "여러 개의 약한 모델 (weak learner, 위크 러너) 을 순차적으로 만들되, **이전 모델의 오차 (error, 에러) 에만 집중** 해 학습"
-> "Build many weak models sequentially, each focusing on the previous model's errors."
+시각화를 보시면 과정이 단계별로 나타나 있습니다. 맨 처음 **Tree 1 (트리 원)** 이 첫 예측을 만드는데, 오차가 플러스마이너스 15 (십오) 분 정도로 아직 엉성합니다. 다음에 오는 **Tree 2 (트리 투)** 는 Tree 1 이 남긴 잔차 (residual, 레지듀얼) 에 집중해서 학습하기 때문에 오차가 플러스마이너스 8 (팔) 분으로 줄어들고, **Tree 3 (트리 쓰리)** 은 또 남은 오차에 집중해서 플러스마이너스 3 (삼) 분까지 내려옵니다. 이런 식으로 n = 200 (엔 이퀄 이백) 번까지 반복하면, 최종 오차는 플러스마이너스 0.5 (제로 포인트 오) 분 수준이 됩니다. 최종 예측은 Tree 1 부터 Tree 200 (트리 이백) 까지의 합입니다.
 
-시각화를 보시면:
-
-- **Tree (트리) 1** — 첫 예측, 오차 ±15 분. 아직 엉성합니다.
-- **Tree 2** — Tree 1 의 잔차 (residual, 레지듀얼) 에 집중해 학습. 오차 ±8 분.
-- **Tree 3** — 남은 오차에 또 집중. 오차 ±3 분.
-- ... n = 200 까지 반복. 최종 오차 ±0.5 분.
-
-**최종 예측 = Tree₁ + Tree₂ + Tree₃ + ... + Tree₂₀₀**
-
-비유하자면, **시험 공부할 때 '틀린 문제만 다시 보는 것'** 과 같습니다. 첫 번째 공부에서 70% 맞춤 → 틀린 30% 만 다시 집중 → 그 중 또 틀린 것만 집중 → 반복. 이런 식으로 정답률을 점진적으로 올립니다.
-
-**Analogy**: studying by reviewing only wrong answers. Get 70% → focus on the wrong 30% → focus on what's still wrong → keep improving.
-
-**이게 "gradient (그래디언트)" boosting (부스팅) 의 의미** — 매 단계 gradient (손실 함수의 기울기) 를 타고 최적으로 수정해 나간다는 뜻.
+비유하자면, 시험 공부할 때 '틀린 문제만 다시 보는 것' 과 똑같습니다. 첫 공부에서 70% (칠십 퍼센트) 를 맞추면, 틀린 30% (삼십 퍼센트) 만 다시 집중적으로 복습하고, 그중 또 틀린 부분만 집중해서 반복하는 방식이라고 생각하시면 됩니다. 이렇게 정답률을 점진적으로 끌어올리는 것이 바로 "gradient (그래디언트)" boosting (부스팅) 이라는 이름의 의미입니다. 매 단계 gradient, 즉 손실 함수의 기울기를 따라 최적으로 수정해 나간다는 뜻입니다.
 
 ---
 
-## 슬라이드 23 · XGBoost 실제 결과 / Actual Results (60 초)
+## 슬라이드 23 · XGBoost 실제 결과 (60 (육십) 초)
 
-실제 우리 프로젝트의 결과입니다. Sprint (스프린트) 별 Test R² (테스트 알제곱) 추이.
+실제 제 프로젝트의 결과입니다. Sprint (스프린트) 별 Test R² (테스트 알제곱) 의 변화를 보여드리겠습니다.
 
-Actual results in our project, by sprint.
+기본 XGBoost (엑스지부스트), 즉 baseline (베이스라인) 은 R² (알제곱) 가 0.10 (제로 포인트 일공) 이었고, 여기에 **TimeSeriesSplit (타임시리즈스플릿)** 을 적용한 P0 (피제로) 스프린트에서도 결과는 R² 0.10 그대로입니다. 다만 **수치는 그대로지만 정직해진 것** 이 핵심입니다. 그다음 **Rotation features (로테이션 피처)** 를 추가한 P1 (피원) 스프린트에서 R² 가 0.43 (제로 포인트 사삼) 으로 뛰었는데, 바로 여기서 3.35 (쓰리 포인트 삼오) 배의 점프가 일어났습니다. 마지막으로 **Conformal interval (컨포멀 인터벌)** 을 적용한 P1+ (피원 플러스) 스프린트에서는 R² 0.43 을 그대로 유지하면서 예측 구간이 추가됐습니다.
 
-- **기본 XGBoost (엑스지부스트) (baseline, 베이스라인)**: R² 0.10
-- **+ TimeSeriesSplit (타임시리즈스플릿) (P0, 피제로)**: R² 0.10 — **수치는 그대로지만 정직해짐**
-- **+ Rotation features (로테이션 피처) ★ (P1, 피원)**: R² **0.43** — 여기서 3.35 배 점프
-- **+ Conformal interval (컨포멀 인터벌) (P1+)**: R² 0.43 유지 + 구간 추가
+여기서 꼭 주목하셨으면 하는 점이 있습니다. **P0 (피제로) 에서 TimeSeriesSplit (타임시리즈스플릿) 으로 바꿨을 때, 수치는 전혀 올라가지 않았습니다.** 왜냐하면 TimeSeriesSplit 은 '더 좋은 모델' 을 만들어주는 기법이 아니라, '**더 정직한 평가 (honest evaluation, 어니스트 이밸류에이션)**' 를 해주는 기법이기 때문입니다. 진짜 향상은 P1 (피원) 의 Rotation features (로테이션 피처) 가 만들어냈고, 다시 강조드리지만 모델을 키우는 것보다 도메인 지식을 피처로 만드는 것이 훨씬 효과적입니다.
 
-**주목할 점: P0 (피제로) 에서 TimeSeriesSplit (타임시리즈스플릿) 으로 바꿨을 때 수치가 안 올라갔습니다.** 왜냐하면 TimeSeriesSplit 은 '더 좋은 모델' 을 만들어주는 게 아니라 '**더 정직한 평가 (honest evaluation, 어니스트 이밸류에이션)**' 를 해줄 뿐이기 때문입니다.
-
-Notice: **P0 didn't improve the number.** Because TimeSeriesSplit doesn't make a better model — it gives a **more honest evaluation**.
-
-**진짜 향상은 P1 (피원) Rotation features (로테이션 피처) 가 만들었습니다.** 다시 강조: 모델을 키우는 것보다 도메인 지식을 feature (피처) 로 만드는 것이 효과적입니다.
-
-**Real improvement came from P1.** Again: domain knowledge > bigger model.
-
-슬라이드 아래의 최종 지표:
-- Test RMSE (테스트 알엠에스이) 22.61 분
-- Test R² (테스트 알제곱) 0.43
-- Conformal coverage (컨포멀 커버리지) 정확히 90.00%
-- 응답 시간 p95 (피95) 42 ms (밀리세컨드)
+슬라이드 아래쪽의 최종 지표를 정리해드리면, Test RMSE (테스트 알엠에스이) 는 22.61 (이십이 점 육일) 분, Test R² (테스트 알제곱) 는 0.43 (제로 포인트 사삼) 이고, Conformal coverage (컨포멀 커버리지) 는 정확히 90.00% (구십 점 영영 퍼센트), 응답 시간 p95 (피 구십오) 는 42 (사십이) ms (밀리세컨드) 입니다.
 
 ---
 
-## 슬라이드 24 · 모델 2 · 왜 Isolation Forest? / Why IF? (75 초)
+## 슬라이드 24 · 모델 2 · 왜 Isolation Forest? (75 (칠십오) 초)
 
 두 번째 모델은 이상 탐지 (anomaly detection, 어노멀리 디텍션) 용 Isolation Forest (아이솔레이션 포레스트) 입니다.
 
-Second model: Isolation Forest for anomaly detection.
+핵심 아이디어는 이렇습니다.
 
-**핵심 아이디어:**
-> "이상치는 소수이고 정상과 거리가 멀어서 **무작위 분할 (random partitioning, 랜덤 파티셔닝) 로 빨리 고립 (isolate, 아이솔레이트)** 된다."
-> "Anomalies are few and far — they get isolated quickly under random partitioning."
+> "이상치는 소수이고 정상 데이터와 거리가 멀기 때문에, **무작위 분할 (random partitioning, 랜덤 파티셔닝) 로 빨리 고립** 된다."
 
-시각화 왼쪽 초록 박스: 정상점 (normal point, 노멀 포인트) 은 트리에서 **깊게 내려가야** 고립됩니다. path length (패스 렝스) 8+ splits (스플리츠).
+시각화 왼쪽의 초록 박스를 보시면, 정상점 (normal point, 노멀 포인트) 은 트리 (tree, 트리) 에서 깊숙이 내려가야 비로소 고립됩니다. path length (패스 렝스) 가 8 (팔) splits (스플리츠) 이상 필요할 정도로 깊습니다. 반면 오른쪽 빨간 박스의 이상점 (anomaly, 어노멀리) 은 단 2 (이) 번에서 3 (삼) 번의 분할만으로 곧바로 고립되고, path length 가 훨씬 짧습니다. 즉, **path length 그 자체가 anomaly score (어노멀리 스코어) 가 됩니다.** 짧으면 이상, 길면 정상이라는 식이라, 매우 직관적입니다.
 
-*Normal point: deep tree, 8+ splits to isolate.*
+그럼 왜 다른 모델이 아닌 Isolation Forest 를 선택했을까요? 하단 박스에 세 가지 이유가 있습니다. 첫째로 **라벨 (label, 레이블) 이 없다** 는 점이 큽니다. 항공 사고는 너무 희귀해서 지도학습 (supervised learning, 수퍼바이즈드 러닝) 자체가 불가능합니다. 둘째는 **O(n log n) (빅오 엔 로그 엔) 의 속도** 로 Autoencoder (오토인코더) 나 One-class SVM (원클래스 에스브이엠) 보다 훨씬 빠르다는 점이고, 셋째는 **직관적이다** 는 점입니다. path length 하나로 해석이 가능합니다.
 
-오른쪽 빨간 박스: 이상점 (anomaly, 어노멀리) 은 **몇 번의 분할로 바로 고립** 됩니다. path length 2-3 splits.
-
-*Anomaly: shallow tree, 2-3 splits.*
-
-**path length (패스 렝스) 자체가 anomaly score (어노멀리 스코어) 입니다.** 짧으면 이상, 길면 정상. 매우 직관적.
-
-**Path length IS the anomaly score.** Short = anomalous, long = normal. Beautifully intuitive.
-
-**왜 다른 모델이 아닌가?** 하단 박스의 3 가지 이유:
-
-1. **라벨 (label, 레이블) 없음 (no labels, 노 레이블스)** — 항공 사고는 희귀해서 지도학습 (supervised learning, 수퍼바이즈드 러닝) 불가능
-2. **O(n log n) (빅오 엔 로그 엔) 속도** — Autoencoder (오토인코더) 나 One-class SVM (원클래스 에스브이엠) 보다 훨씬 빠름
-3. **직관적** — path length 로 해석 가능
-
-**Autoencoder (오토인코더) 를 쓰면 GPU (지피유) 필요 + 학습 불안정 + 블랙박스.** IF (아이에프) 는 이 셋 다 해결합니다.
-
-**Autoencoder: GPU + unstable training + black box.** IF solves all three.
+Autoencoder 를 선택했다면 GPU (지피유) 가 필요하고 학습이 불안정하며 블랙박스 (black box, 블랙박스) 가 됐을 텐데, Isolation Forest 는 이 세 가지 문제를 모두 해결합니다.
 
 ---
 
-## 슬라이드 25 · Per-phase IF × 7 (75 초)
+## 슬라이드 25 · Per-phase IF × 7 (75 (칠십오) 초)
 
-IF (아이에프) 를 7 개 만든 이유를 설명드리겠습니다.
+Isolation Forest (아이솔레이션 포레스트) 를 하나가 아니라 일곱 개를 만든 이유를 설명드리겠습니다.
 
-Why 7 models instead of 1?
+상단 빨간 박스에 문제가 정리되어 있습니다.
 
-상단 빨간 박스의 문제:
+> CRUISE (크루즈) 중에는 30,000 (삼만) ft (피트) 가 정상이지만, LANDING (랜딩) 중에는 30,000 ft 가 완전히 비정상입니다.
 
-> CRUISE (크루즈) 중 30,000 ft (피트) 는 정상인데, LANDING (랜딩) 중 30,000 ft 는 완전 비정상.
+단일 모델은 이 둘을 구분하지 못합니다. 결과적으로 TAXI (택시) 중의 급가속을 CRUISE 임계값 (threshold, 쓰레숄드) 위반으로 오인하게 되고, false positive (폴스 포지티브) 가 폭주하면서 **alert fatigue (얼럿 패티그)** 를 유발합니다.
 
-**30,000 ft during CRUISE = normal, but 30,000 ft during LANDING = abnormal.**
+그래서 해결책으로 **일곱 개의 비행 단계마다 별도의 Isolation Forest 를 두고, contamination (컨태미네이션) 을 개별 튜닝 (tuning, 튜닝)** 했습니다. 구체적으로 보면 TAXI (택시) 는 조용한 구간이라 이상이 거의 없기 때문에 contamination 을 0.02 (제로 포인트 영이) 로 설정했고, TAKEOFF (테이크오프) 는 0.03 (제로 포인트 영삼), CLIMB (클라임) 은 0.04 (제로 포인트 영사), CRUISE 는 0.05 (제로 포인트 영오), DESCENT (디센트) 는 0.04 로 두었습니다. 그리고 APPROACH (어프로치) 와 LANDING 은 항공 사고가 가장 빈발하는 구간이라 0.06 (제로 포인트 영육) 으로 가장 민감하게 설정했습니다.
 
-단일 모델은 둘을 구분 못합니다. 결과: TAXI (택시) 중 급가속을 CRUISE 임계값 (threshold, 쓰레숄드) 위반으로 오인 → false positive (폴스 포지티브) 폭주 → **alert fatigue (얼럿 패티그)**.
+정리하면 각 phase (페이즈) 별로 contamination 값을 세 배의 범위로 튜닝한 것인데, TAXI 의 2% (이 퍼센트) 부터 APPROACH 와 LANDING 의 6% (육 퍼센트) 까지 차등을 뒀습니다.
 
-Single model confuses them. Result: **alert fatigue**.
-
-해결: **7 개의 비행 단계마다 별도 IF + contamination (컨태미네이션) 별도 튜닝 (tuning, 튜닝)**.
-
-- TAXI (택시) contamination = 0.02 (조용한 구간, 이상 거의 없음)
-- TAKEOFF (테이크오프) 0.03, CLIMB (클라임) 0.04, CRUISE (크루즈) 0.05, DESCENT (디센트) 0.04
-- **APPROACH (어프로치) 0.06, LANDING (랜딩) 0.06** — 사고가 가장 빈발하는 구간이라 민감하게
-
-각 phase (페이즈) 별로 contamination 을 **3 배 차이** 로 튜닝했습니다. TAXI 2% 부터 APPROACH/LANDING 6% 까지.
-
-Each phase tuned with **3× range of contamination** — from 2% (TAXI) to 6% (APPROACH/LANDING).
-
-**결과 (하단 남색 박스): False Positive (폴스 포지티브) −67%.** Alert fatigue 가 대폭 완화됐습니다. v2.1.10 (ADR-006 (에이디알 영영식)) 에서 서빙 (serving, 서빙) 에도 실제 wire-up (와이어-업) 완료.
+그 결과가 하단 남색 박스에 있습니다. **False Positive (폴스 포지티브) 가 67% (육십칠 퍼센트) 감소** 했고, alert fatigue 가 대폭 완화됐습니다. v2.1.10 (브이 투 포인트 원 포인트 원공) 과 ADR-006 (에이디알 영영식) 에서 서빙 (serving, 서빙) 에도 실제로 wire-up (와이어-업) 이 완료된 상태입니다.
 
 ---
 
-## 슬라이드 26 · Conformal Prediction (75 초)
+## 슬라이드 26 · Conformal Prediction (75 (칠십오) 초)
 
-마지막 핵심 기법. 점 예측 (point prediction, 포인트 프리딕션) 대 구간 예측 (interval prediction, 인터벌 프리딕션).
+마지막 핵심 기법입니다. 점 예측 (point prediction, 포인트 프리딕션) 과 구간 예측 (interval prediction, 인터벌 프리딕션) 의 차이를 말씀드립니다.
 
-Last technique. Point vs interval prediction.
+왼쪽 빨간 박스에 적용 전 (before, 비포어) 상황이 있습니다.
 
-왼쪽 빨간 박스 — BEFORE (비포어):
-> "15 분 지연"
+> "15 (십오) 분 지연"
 
-이 한 숫자는 얼마나 믿어야 할까요? **실제로 5 분일 수도 40 분일 수도 있습니다.**
+이 한 개의 숫자를 얼마나 신뢰할 수 있을까요? 실제로는 5 (오) 분일 수도, 40 (사십) 분일 수도 있습니다. 관제사가 이 숫자만 보고 승객 안내를 어떻게 하겠습니까? 근거 없는 high/medium/low confidence (하이/미디엄/로우 컨피던스) 분류로는 부족합니다.
 
-*How much should you trust this? Actually could be 5 or 40 minutes.*
+오른쪽 초록 박스가 Conformal (컨포멀) 을 적용한 후 (after, 애프터) 의 결과입니다.
 
-관제사가 이 숫자만 보고 어떻게 승객 안내를 하나요? 근거 없는 "high/medium/low confidence (하이/미디엄/로우 컨피던스)" 분류로는 부족합니다.
+> "90% (구십 퍼센트) 확률로 6 (육) 분에서 41 (사십일) 분 사이의 지연"
 
-오른쪽 초록 박스 — AFTER (애프터) (Conformal, 컨포멀):
-> "**90% 확률로 6 ~ 41 분 지연**"
+이 구간은 **수학적으로 보장된** 구간이고, 그것도 분포 가정 없이 (distribution-free, 디스트리뷰션 프리) 보장됩니다. 구현은 MAPIE (마피) 라이브러리 (library, 라이브러리) 로 했는데, 실측 coverage (커버리지) 가 정확히 90.00% (구십 점 영영 퍼센트) 로 나온 것이 그 증거입니다.
 
-이건 **수학적으로 보장** 된 구간입니다. 분포 가정 없이 (distribution-free, 디스트리뷰션 프리).
+이제 관제사는 다음과 같이 정량적 의사결정을 할 수 있습니다.
 
-*Mathematically guaranteed coverage, distribution-free.*
+> "최악의 경우 41 (사십일) 분까지 지연 가능 → 승객 안내 준비"
 
-MAPIE (마피) 라이브러리 (library, 라이브러리) 로 구현. **실측 coverage (커버리지) 가 정확히 90.00%** 나온 것이 증거입니다.
-
-이제 관제사는:
-
-> "최악의 경우 41 분까지 지연 가능 → 승객 안내 준비"
-
-이렇게 **정량적 의사결정** 을 할 수 있습니다.
-
-**ATC can now make quantified decisions: 'worst case 41 min → prepare passenger announcement'.**
+단순한 점 추정이 아니라 의사결정에 직접 쓸 수 있는 신뢰구간 (confidence interval, 컨피던스 인터벌) 을 제공하는 것, 이것이 Conformal Prediction (컨포멀 프리딕션) 의 강점입니다.
 
 ---
 
-## 슬라이드 27 · 데이터 → 의사결정 End-to-End (60 초)
+## 슬라이드 27 · 데이터 → 의사결정 End-to-End (60 (육십) 초)
 
-모든 걸 연결해 보겠습니다. 비행기가 공중에 떠 있을 때부터 관제사 화면에 알림이 뜰 때까지 **7 단계** 가 5 초 이내에 흐릅니다.
+이제 모든 조각을 하나로 연결해 보겠습니다. 비행기가 공중에 떠 있는 순간부터, 관제사 화면에 알림이 뜨는 순간까지, 전체 일곱 단계가 5 (오) 초 이내에 흐릅니다.
 
-Let me connect everything. From airborne aircraft to alert on ATC screen — 7 stages, all within 5 seconds.
+가장 먼저 **ADS-B (에이디에스-비) 수신** 단계에서는, 비행기가 위치를 방송하면 지상 수신기가 받아 OpenSky (오픈스카이) 로 보내고, 그다음 **Kafka (카프카) 도착** 단계에서 flight-position (플라이트 포지션) 토픽 (topic, 토픽) 에 Avro (아브로) 메시지가 쌓입니다. 이어서 **Iceberg Silver (아이스버그 실버)** 단계에서 flight_features (플라이트 피처스) 테이블 안에서 관련 데이터들이 조인 (join, 조인) 되고, **XGBoost (엑스지부스트) 예측** 단계에서 42 (사십이) ms (밀리세컨드) 안에 "지연 20 (이십) 분" 이라는 결과를 뽑아냅니다. 그다음 **Conformal (컨포멀) 구간** 단계에서 "90% (구십 퍼센트) 확률로 12 (십이) 분에서 40 (사십) 분 사이" 라는 구간이 계산되고, **RAG (라그) + LLM (엘엘엠) 조언** 단계에서 "FAA AIM (에프에이에이 에이아이엠) 7-1 (세븐 다시 원) 에 따라 승객 안내를 준비하십시오" 같은 출처 기반 조언이 생성됩니다. 마지막 **관제사 대시보드 (dashboard, 대시보드)** 단계에서 5 초 이내에 모든 정보가 화면에 표시됩니다.
 
-1. **ADS-B (에이디에스-비) 수신** — 비행기가 위치 방송 → 지상 수신기 → OpenSky (오픈스카이)
-2. **Kafka (카프카) 도착** — flight-position (플라이트 포지션) 토픽 (topic, 토픽) 에 Avro (아브로) 메시지
-3. **Iceberg Silver (아이스버그 실버)** — flight_features (플라이트 피처스) 테이블에 조인
-4. **XGBoost (엑스지부스트) 예측** — delay (딜레이) = 20 min, 42 ms
-5. **Conformal (컨포멀) 구간** — [12, 40] min, 90% 확률
-6. **RAG (라그) + LLM (엘엘엠) 조언** — "FAA AIM (에프에이에이 에이아이엠) 7-1 에 따라 승객 안내 준비"
-7. **관제사 대시보드 (dashboard, 대시보드)** — <5 s 전체 end-to-end (엔드 투 엔드)
-
-**이 전체가 5 초 이내에 끝납니다.** 각 단계의 지연: Kafka 100 ms (밀리세컨드), Iceberg 500 ms, XGBoost 42 ms, Conformal 100 ms, LLM 2-3 s (세컨드), 나머지 network (네트워크).
-
-**End-to-end under 5 seconds.** LLM is the slow part (2-3 s); everything else is sub-second.
+이 전체 과정이 5 (오) 초 이내에 완료됩니다. 각 단계의 지연 시간을 보면 Kafka 가 약 100 (백) ms, Iceberg 가 500 (오백) ms, XGBoost 가 42 ms, Conformal 이 100 ms 수준이고, LLM 이 2 (이) 초에서 3 (삼) 초 정도 걸리며 나머지는 네트워크 (network, 네트워크) 구간입니다. LLM 이 가장 느린 병목이고, 나머지는 모두 1 (일) 초 이내에 처리됩니다.
 
 ---
 
-## 슬라이드 28 · 학생을 위한 핵심 교훈 / Key Takeaways (90 초)
+## 슬라이드 28 · 학생을 위한 핵심 교훈 (90 (구십) 초)
 
-이 발표에서 여러분이 가져갈 5 가지 교훈입니다.
+이 발표에서 여러분이 가져가셨으면 하는 다섯 가지 교훈을 정리해드리겠습니다.
 
-Five takeaways to remember.
+첫 번째는, 데이터는 raw (로우) 단계에서 절대 완벽하지 않다는 점입니다. 그러니 cleaning (클리닝) 단계를 절대로 건너뛰지 마시기 바랍니다. 두 번째는, Feature Engineering (피처 엔지니어링) 이 모델 크기보다 중요하다는 점입니다. 실제 증거로 제 프로젝트의 P1 (피원) 에서 피처 5 (다섯) 개만 추가해서 R² (알제곱) 가 335% (삼백삼십오 퍼센트) 개선됐습니다. 세 번째는, 시계열 데이터는 절대 shuffle (셔플) 하지 말라는 것입니다. temporal leakage (템포럴 리키지) 는 가장 흔하면서도 가장 치명적인 실수이기 때문입니다. 네 번째는, 모델 선택을 정확도만으로 하지 말라는 것입니다. 해석성과 운영성, 유지 비용을 모두 종합적으로 고려해야 합니다. 마지막 다섯 번째는, 도메인 지식 (domain knowledge, 도메인 날리지) 이 곧 경쟁력이라는 점입니다. EUROCONTROL (유로컨트롤) 의 '지연 45% (사십오 퍼센트) 는 reactionary (리액셔너리) 다' 라는 연구 한 줄이, 제가 만든 Rotation features (로테이션 피처) 설계의 씨앗이 됐습니다.
 
-**① 데이터는 raw (로우) 부터 완벽하지 않다.**
-*Raw data is never clean.* — cleaning (클리닝) 단계를 절대 건너뛰지 마라.
-
-**② Feature engineering (피처 엔지니어링) > 모델 크기.**
-*Features beat model size.* — 실제 증거: P1 (피원) 에서 5 features 추가로 R² +335%.
-
-**③ 시계열은 절대 shuffle (셔플) 하지 마라.**
-*Never shuffle time-series.* — temporal leakage (템포럴 리키지) 는 가장 흔한 치명적 실수.
-
-**④ 모델 선택은 정확도만이 아니다.**
-*Accuracy is not the only metric.* — 해석성 · 운영성 · 유지비 모두 고려.
-
-**⑤ 도메인 지식 (domain knowledge, 도메인 날리지) 이 곧 경쟁력 (competitive edge, 컴페티티브 엣지).**
-*Domain knowledge = competitive edge.* — EUROCONTROL (유로컨트롤) 의 '지연 45% 는 reactionary (리액셔너리)' 라는 연구 한 줄이 Rotation features (로테이션 피처) 설계의 씨앗이 됐습니다.
-
-**Especially 2 and 3 are where beginners most often fail.** 우리 프로젝트의 P0/P1 sprint (스프린트) 가 그 증거입니다.
-
-**2 and 3 are the most commonly failed by beginners.** Our P0/P1 sprints are the proof.
+특히 두 번째와 세 번째가 초심자가 가장 많이 실패하는 지점입니다. 제 프로젝트의 P0 (피제로) 와 P1 (피원) 스프린트 (sprint, 스프린트) 가 바로 그 증거입니다.
 
 ---
 
-## 슬라이드 29 · Q&A / 질의응답 (질문 시간만큼)
+## 슬라이드 29 · Q&A (질문 시간만큼)
 
-질문을 받겠습니다. 예상 질문 5 개를 미리 준비해 왔습니다.
+질문을 받겠습니다. 예상 질문 다섯 개를 미리 준비해 왔습니다.
 
-I'll take questions. I prepared 5 likely ones.
+먼저 첫 번째 질문, **Q1 (큐 원). 왜 Iceberg (아이스버그) 가 그냥 parquet (파케이) 보다 낫나요?** 답변드리면, plain parquet (플레인 파케이) 은 단순히 파일에 불과합니다. 반면 Iceberg 는 catalog (카탈로그) 와 ACID (에이시드) 트랜잭션 (transaction, 트랜잭션), 스키마 진화 (schema evolution, 스키마 에볼루션), time-travel (타임 트래블) 이 모두 포함된 테이블 포맷 (format, 포맷) 입니다. "3 (삼) 일 전 상태는 어땠지?" 같은 쿼리 (query, 쿼리) 는 일반 parquet 으로는 불가능합니다.
 
-**Q1: 왜 Iceberg (아이스버그) 가 그냥 parquet (파케이) 보다 낫나요?**
-*A: Plain parquet (플레인 파케이) 은 파일일 뿐. Iceberg 는 catalog (카탈로그) + ACID (에이시드) 트랜잭션 + 스키마 진화 + time-travel (타임 트래블). "3 일 전 상태" 쿼리 같은 게 parquet 으론 불가능.*
+두 번째 질문, **Q2 (큐 투). Conformal (컨포멀) 말고 Bayesian CI (베이지안 씨아이) 는 안 되나요?** Bayesian 은 prior (프라이어) 가정이 필요합니다. 반면 Conformal 은 분포 가정 자체가 없습니다. 그래서 데이터가 Bayesian 가정을 어기면 구간이 깨지지만, Conformal 은 깨지지 않습니다.
 
-**Q2: Conformal (컨포멀) 말고 Bayesian CI (베이지안 씨아이) 는 안 되나요?**
-*A: Bayesian 은 prior (프라이어) 가정 필요. Conformal 은 분포 가정 없음 (distribution-free, 디스트리뷰션 프리). 데이터가 Bayesian 가정을 어기면 구간이 깨지지만 Conformal 은 안 깨집니다.*
+세 번째 질문, **Q3 (큐 쓰리). Per-phase (퍼 페이즈) 일곱 개 대신 phase 를 feature 로 넣으면 안 되나요?** 단일 모델로 하면 contamination (컨태미네이션) 을 모든 phase (페이즈) 에 동일하게 적용해야 합니다. 그러면 TAXI (택시) 의 2% (이 퍼센트) 와 LANDING (랜딩) 의 6% (육 퍼센트) 처럼 세 배 차이가 나는 phase 별 특성을 전혀 반영할 수 없게 됩니다.
 
-**Q3: Per-phase (퍼 페이즈) 7 개 대신 phase 를 feature 로 넣으면?**
-*A: 단일 모델은 contamination (컨태미네이션) 을 모든 phase 에 동일하게 써야 합니다. phase 별 3 배 차이 (TAXI 2% ↔ LANDING 6%) 를 반영 못 합니다.*
+네 번째 질문, **Q4 (큐 포). 5.7M (파이브 포인트 세븐 밀리언), 즉 오백칠십만 행 전부 말고 샘플 (sample, 샘플) 만 써도 되지 않나요?** 실제로 10% (십 퍼센트) 수준의 샘플링 (sampling, 샘플링) 을 병행하고 있습니다. 다만 chronological (크로놀로지컬) 하게 뽑아서 시간 편향이 생기지 않도록 했습니다. 500k (파이브 헌드레드 케이), 즉 오십만 행이면 통계적으로 충분합니다.
 
-**Q4: 5.7 M 행 전부 말고 샘플 (sample, 샘플) 만 써도 되나요?**
-*A: 10% sampling (샘플링) 했습니다. 다만 chronological (크로놀로지컬) 하게 뽑아서 시간 편향은 없습니다. 500k 행이면 충분한 통계.*
-
-**Q5: RAG (라그) 161 chunks (청크스) 로 충분한가요?**
-*A: RAGAs (라가스) 평가에서 faithfulness (페이스풀니스) 0.91, context_precision (컨텍스트 프리시전) 0.85 로 검증됐습니다. 국내선 관제 용도로는 충분. 국제선으로 확장 시 추가 필요.*
+다섯 번째 질문, **Q5 (큐 파이브). RAG (라그) 의 161 (백육십일) chunks (청크스) 로 충분한가요?** RAGAs (라가스) 평가에서 faithfulness (페이스풀니스) 0.91 (제로 포인트 구일), context_precision (컨텍스트 프리시전) 0.85 (제로 포인트 팔오) 로 검증됐습니다. 국내선 관제 용도로는 충분하고, 국제선으로 확장할 경우에는 추가 인덱싱 (indexing, 인덱싱) 이 필요합니다.
 
 ---
 
-## 슬라이드 30 · 감사합니다 / Thank You (30 초)
+## 슬라이드 30 · 감사합니다 (30 (삼십) 초)
 
-감사합니다. Thank you (땡큐).
+감사합니다.
 
-오늘 발표의 **핵심 세 가지** 를 다시 짧게:
+오늘 발표의 핵심 세 가지를 짧게 다시 정리하겠습니다. 첫째로 데이터는 전처리 (preprocessing, 프리프로세싱) 가 핵심이라는 점, 여섯 단계 파이프라인 (pipeline, 파이프라인) 을 꼭 기억해 주셨으면 좋겠습니다. 둘째로 Feature Engineering (피처 엔지니어링) 이 모델보다 강력하다는 점, 335% (삼백삼십오 퍼센트) 개선 사례를 꼭 기억해 주시기 바랍니다. 마지막 셋째로 시계열 데이터는 절대 shuffle (셔플) 하지 말라는 것, ADR-004 (에이디알 영영사) 의 원칙입니다.
 
-1. **데이터는 전처리 (preprocessing, 프리프로세싱) 가 핵심** — 6 단계 파이프라인
-2. **Feature engineering (피처 엔지니어링) 이 모델보다 강력** — +335% 사례
-3. **시계열은 절대 shuffle (셔플) 금지** — ADR-004 (에이디알 영영사) 원칙
+관련 자원은 슬라이드에 정리되어 있습니다. GitHub (깃허브) 주소는 `github.com/biz-doublej/SkyOps-Intelligence` (깃허브 닷 컴 슬래시 비즈 더블제이 슬래시 스카이옵스 인텔리전스) 이고, 데이터 문서는 `docs/data_collection.md` (독스 슬래시 데이터 컬렉션 닷 엠디) 에 있습니다. Reproduction guide (리프로덕션 가이드) 는 564 (오백육십사) 줄 분량으로 준비해 두었고, ADR (에이디알) 일곱 개는 `docs/adr/` (독스 슬래시 에이디알) 경로에 있습니다. 연락처는 doublej.biz01@gmail.com (더블제이 닷 비즈 영일 앳 지메일 닷 컴) 이니, 질문이 더 있으시면 발표 후에도 편하게 말씀해 주시기 바랍니다.
 
-**The three core lessons**: preprocessing pipeline · features > model · never shuffle time-series.
-
-자원은 슬라이드에 있습니다:
-- GitHub (깃허브): `github.com/biz-doublej/SkyOps-Intelligence`
-- 데이터 문서: `docs/data_collection.md`
-- Reproduction guide (리프로덕션 가이드): 564 lines
-- ADR (에이디알) 7 개: `docs/adr/`
-- 연락: doublej.biz01@gmail.com
-
-**질문이 더 있으시면 발표 후에도 편하게 말씀해 주세요.**
-
-**If you have more questions, feel free to ask after the talk.**
-
-감사합니다. Thank you.
+감사합니다.
 
 ---
 
-## 📎 발표자용 체크리스트 / Presenter's Checklist
+## 📎 발표자용 체크리스트
 
-- [ ] 슬라이드 8 (SWIM (스윔)) — "대학 프로젝트로 드문 성과" 강조 · stress uniqueness
-- [ ] 슬라이드 16 (Rotation (로테이션) +335%) — **천천히**, 숫자 각인
-- [ ] 슬라이드 17 (shuffle (셔플)) — **지금 당장 고치라** 는 톤으로
-- [ ] 슬라이드 22 (XGBoost (엑스지부스트)) — "틀린 문제만 다시 보는 것" 비유 사용
-- [ ] 슬라이드 28 (Takeaways (테이크어웨이스)) — 5 개 각각 손가락 펴면서 카운트
-- [ ] Q&A (큐앤에이) — 답변 짧게, 구체 숫자 + ADR (에이디알) 번호로 뒷받침
-- [ ] 각 슬라이드 처음 등장하는 영어 용어는 **괄호 안 한글 발음을 한 번** 또렷이 말하고 넘어가기 (외국인 학생 배려)
+슬라이드 8 (팔) 의 SWIM (스윔) 에서는 "대학 프로젝트로는 드문 성과" 라는 점을 강조하고, 슬라이드 16 (십육) 의 Rotation (로테이션) 335% (삼백삼십오 퍼센트) 부분은 천천히 진행해서 숫자를 각인시키겠습니다. 슬라이드 17 (십칠) 의 shuffle (셔플) 경고는 "지금 당장 고치라" 는 톤으로 전달하고, 슬라이드 22 (이십이) 의 XGBoost (엑스지부스트) 설명에서는 "틀린 문제만 다시 보는 것" 비유를 꼭 사용하겠습니다. 슬라이드 28 (이십팔) 의 교훈 다섯 가지는 각각 손가락을 펴면서 카운트하며 말씀드리고, Q&A (큐앤에이) 에서는 답변을 짧게 가져가되 구체적인 숫자와 ADR (에이디알) 번호로 뒷받침하겠습니다. 마지막으로, 각 슬라이드에서 처음 등장하는 개발 용어는 괄호 안의 한글 발음을 한 번 또렷이 말하고 넘어가서, 외국인 학생들도 따라올 수 있도록 배려하겠습니다.
 
-## 📎 한-영 핵심 용어 노트 / Korean-English Term Cheat Sheet
+## 📎 핵심 개발 용어 발음 노트
 
-| 한국어 | English | 발음 | 슬라이드 |
+| 한국어 | 영어 | 발음 | 슬라이드 |
 |---|---|---|---|
 | 측정값 | quantified observation | 콴티파이드 옵저베이션 | 3 |
 | 시계열 | time-series | 타임시리즈 | 4, 17 |
@@ -829,7 +428,7 @@ I'll take questions. I prepared 5 likely ones.
 | 커버리지 | coverage | 커버리지 | 26 |
 | End-to-end | end-to-end | 엔드 투 엔드 | 27 |
 
-## 📎 자주 쓰는 모델·도구 발음 / Tool & Model Pronunciation
+## 📎 자주 쓰는 모델과 도구 발음
 
 | 도구 / 모델 | 발음 |
 |---|---|
@@ -855,7 +454,7 @@ I'll take questions. I prepared 5 likely ones.
 | DPO | 디피오 |
 | RAG | 라그 |
 | vLLM | 브이엘엘엠 |
-| Qwen2.5-7B | 큐웬 투포인트파이브 세븐비 |
+| Qwen2.5-7B | 큐웬 투 포인트 파이브 세븐비 |
 | Solace JMS | 솔레이스 제이엠에스 |
 | FAA SWIM | 에프에이에이 스윔 |
 | NOTAM | 노탐 |
@@ -864,5 +463,66 @@ I'll take questions. I prepared 5 likely ones.
 | ICAO | 아이카오 |
 | EUROCONTROL | 유로컨트롤 |
 | DigiCert Global Root G2 | 디지서트 글로벌 루트 지투 |
-| AIXM 5.1 XML | 에이아이엑스엠 파이브포인트원 엑스엠엘 |
+| AIXM 5.1 XML | 에이아이엑스엠 파이브 포인트 원 엑스엠엘 |
 | c_rehash | 씨-리해시 |
+| TR / TE | 티알 / 티이 |
+| JSON | 제이슨 |
+| XML | 엑스엠엘 |
+| CSV | 씨에스브이 |
+| API | 에이피아이 |
+| CPU | 씨피유 |
+| GPU | 지피유 |
+| ms | 밀리세컨드 |
+| ft | 피트 |
+| MB | 엠비 |
+| GB | 기가바이트 |
+| UTC | 유티씨 |
+| hPa | 헥토파스칼 |
+
+## 📎 자주 쓰는 숫자 읽는 법
+
+| 표기 | 발음 |
+|---|---|
+| 0.10 | 제로 포인트 일공 |
+| 0.43 | 제로 포인트 사삼 |
+| 3.35 | 쓰리 포인트 삼오 |
+| 5.7M | 파이브 포인트 세븐 밀리언 (오백칠십만) |
+| 22.61 | 이십이 점 육일 |
+| 90.00% | 구십 점 영영 퍼센트 |
+| 335% | 삼백삼십오 퍼센트 |
+| 67% | 육십칠 퍼센트 |
+| 45% | 사십오 퍼센트 |
+| 40% | 사십 퍼센트 |
+| 38.8% | 삼십팔 점 팔 퍼센트 |
+| 39.6% | 삼십구 점 육 퍼센트 |
+| 3.4% | 삼 점 사 퍼센트 |
+| 6.2 분 | 육 점 이 분 |
+| 1,971 분 | 천구백칠십일 분 |
+| 35,000 | 삼만 오천 |
+| 30,000 ft | 삼만 피트 |
+| 3,000 ft | 삼천 피트 |
+| 400k | 포 헌드레드 케이 (사십만) |
+| 50k | 피프티 케이 (오만) |
+| 500k | 파이브 헌드레드 케이 (오십만) |
+| 42 ms | 사십이 밀리세컨드 |
+| 100 ms | 백 밀리세컨드 |
+| 500 ms | 오백 밀리세컨드 |
+| ±0.30 | 플러스마이너스 제로 포인트 삼공 |
+| ±6.14 | 플러스마이너스 육 점 일사 |
+| -9999 | 마이너스 구천구백구십구 |
+| -1 | 마이너스 일 |
+| TLS 1.2 | 티엘에스 원 포인트 투 |
+| AIXM 5.1 | 에이아이엑스엠 파이브 포인트 원 |
+| v2.1.10 | 브이 투 포인트 원 포인트 원공 |
+| P0 / P1 / P1+ | 피제로 / 피원 / 피원 플러스 |
+| ADR-004 | 에이디알 영영사 |
+| ADR-006 | 에이디알 영영식 |
+| n_splits=5 | 엔 스플릿츠 이퀄 파이브 |
+| shuffle=True | 셔플 이퀄 트루 |
+| Q1020 | 큐 원제로투제로 |
+| 29012KT | 투나인제로 원투 케이티 |
+| 030900Z | 제로쓰리 제로나인제로제로 지 |
+| SCT030 | 에스씨티 제로쓰리제로 |
+| 08/M02 | 제로에잇 슬래시 엠 제로투 |
+| 409 Conflict | 포어오나인 컨플릭트 |
+| 2026-04-19 14:30:00 | 이천이십육 다시 영사 다시 십구 공백 십사 시 삼십 분 영 초 |
